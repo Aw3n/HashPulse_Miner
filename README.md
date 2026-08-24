@@ -4,9 +4,10 @@
 
 ![version](https://img.shields.io/badge/version-1.0.0-00c89b)
 ![support](https://img.shields.io/badge/CPU%20%2B%20GPU-00d4ff)
+![platforms](https://img.shields.io/badge/Windows%20%2B%20Linux-9cf)
 ![dev tax](https://img.shields.io/badge/Dev%20Tax-1%25-ffa500)
 
-HashPulse est un mineur Xelis performant supportant à la fois le **CPU** et le **GPU (OpenCL)**, l'algorithme **XelisHash V3**, le minage **solo** (daemon) et le minage en **pool** (Stratum).
+HashPulse est un mineur Xelis performant supportant à la fois le **CPU** et le **GPU (OpenCL)**, l'algorithme **XelisHash V3**, le minage **solo** (daemon) et le minage en **pool** (Stratum). Disponible pour **Windows** et **Linux (toutes distributions)**.
 
 ---
 
@@ -19,6 +20,7 @@ HashPulse est un mineur Xelis performant supportant à la fois le **CPU** et le 
 5. [Dev Tax](#5-dev-tax-taxe-de-développement)
 6. [Configuration d'environnement](#6-configuration-denvironnement)
 7. [Guide GPU OpenCL](#7-guide-gpu-opencl)
+8. [Linux (toutes distributions)](#8-linux-toutes-distributions)
 
 ---
 
@@ -26,11 +28,21 @@ HashPulse est un mineur Xelis performant supportant à la fois le **CPU** et le 
 
 ### Fichier exécutable
 
+**Windows**
+
 | | |
 |---|---|
 | **Nom** | `HashPulse.exe` |
 | **Taille** | ~2.68 MB |
 | **Support GPU** | OpenCL inclus dans le binaire |
+
+**Linux** (voir [section 8](#8-linux-toutes-distributions))
+
+| | |
+|---|---|
+| **Nom** | `HashPulse-linux-x86_64` (CPU) · `HashPulse-linux-x86_64-gpu` (CPU+GPU) |
+| **Taille** | ~4.1 MB · ~4.7 MB |
+| **Compatibilité** | Toutes distributions, 100 % statique (musl), zéro dépendance |
 
 ---
 
@@ -92,21 +104,13 @@ HashPulse.exe --pool stratum+tcp://fr.grandpool.io:2025 --address xel:VOTRE_ADRE
 
 ⚠️ GrandPool nécessite un user-agent whitelisté. Utilisez `--user-agent "rigel/1.4.5"` pour contourner la restriction. Serveurs : FR, KZ, US.
 
-### GPU Mining — GPU seul (CPU inactif)
+### GPU Mining — Hybride CPU + GPU (défaut)
 
 ```powershell
 HashPulse.exe --pool stratum+tcp://fr.vipor.net:5077 --address xel:VOTRE_ADRESSE --gpu
 ```
 
-Active le minage GPU OpenCL uniquement. Le CPU reste inactif (<2 % d'overhead réseau). Ajoutez `--threads N` pour combiner CPU + GPU.
-
-### Hybride CPU + GPU
-
-```powershell
-HashPulse.exe --pool stratum+tcp://fr.vipor.net:5077 --address xel:VOTRE_ADRESSE --gpu --threads 4
-```
-
-Utilise 4 threads CPU + le GPU simultanément. Par défaut avec `--gpu`, le CPU est désactivé.
+Active le minage GPU OpenCL **en parallèle du CPU** (tous les cœurs par défaut) : XelisHash V3 favorise le CPU, l'hybride donne le meilleur hashrate total. Utilisez `--no-cpu` pour désactiver le CPU, ou `--threads N` pour limiter le nombre de threads CPU.
 
 ### GPU avec intensité personnalisée
 
@@ -142,8 +146,9 @@ Définit un nom de worker personnalisé pour identifier votre rig sur le pool.
 | `--pool <URL>` | URL Stratum du pool pour le pool mining | **Requis (pool)** |
 | `--address <ADDR>` | Adresse wallet Xelis pour recevoir les récompenses | **Obligatoire** |
 | `--worker <NAME>` | Nom du worker visible sur le pool | `worker1` |
-| `--threads <N>` | Nombre de threads CPU pour le minage | auto (nb cœurs, GPU : 0) |
-| `--gpu` | Active le minage GPU OpenCL (désactive le CPU par défaut) | désactivé |
+| `--threads <N>` | Nombre de threads CPU pour le minage | auto (tous les cœurs) |
+| `--gpu` | Active le minage GPU OpenCL (le CPU reste actif par défaut) | désactivé |
+| `--no-cpu` | Désactive complètement le minage CPU | désactivé |
 | `--gpu-ids <IDS>` | IDs des GPU à utiliser (séparés par virgule) | `0` |
 | `--gpu-intensity <N>` | Work-items par GPU (~531 KB VRAM chacun). Plus = plus de hashrate | auto (2048) |
 | `--dev-fee <PERCENT>` | Pourcentage de la dev tax (minage pour le développeur) | `1.0` |
@@ -255,10 +260,56 @@ Au démarrage, HashPulse détecte et liste tous les GPU OpenCL disponibles avec 
 
 ---
 
+## 8. Linux (toutes distributions)
+
+Deux binaires Linux sont fournis, **100 % statiques (musl)** : aucune dépendance, ils fonctionnent sur Ubuntu, Debian, Arch, CentOS, Fedora, Alpine, NixOS… y compris les serveurs sans interface graphique.
+
+| Fichier | Usage |
+|---|---|
+| `HashPulse-linux-x86_64` | CPU uniquement, zéro dépendance |
+| `HashPulse-linux-x86_64-gpu` | CPU + GPU (OpenCL) — le loader ICD est embarqué, il charge le pilote NVIDIA/AMD/Intel à l'exécution |
+
+### Démarrage rapide
+
+```bash
+chmod +x HashPulse-linux-x86_64-gpu
+./HashPulse-linux-x86_64-gpu --gpu --pool stratum+tcp://fr.vipor.net:5077 --address xel:VOTRE_ADRESSE --worker rig_01
+```
+
+Toutes les options de la [section 3](#3-toutes-les-options) sont identiques sous Linux.
+
+### Prérequis GPU sous Linux
+
+Le binaire `-gpu` embarque le loader OpenCL ; seul le pilote de votre carte est requis :
+
+- **NVIDIA** : pilote propriétaire standard (nvidia-driver)
+- **AMD** : `rocm-opencl-runtime` ou ROCm
+- **Intel** : `intel-opencl-icd`
+
+Vérifiez la détection avec :
+
+```bash
+./HashPulse-linux-x86_64-gpu --gpu --pool stratum+tcp://fr.vipor.net:5077 --address xel:VOTRE_ADRESSE
+```
+
+### Niveau de log (bash)
+
+```bash
+RUST_LOG=info ./HashPulse-linux-x86_64-gpu --gpu --pool stratum+tcp://fr.vipor.net:5077 --address xel:VOTRE_ADRESSE
+```
+
+### Exécution en arrière-plan (serveur)
+
+```bash
+nohup ./HashPulse-linux-x86_64-gpu --gpu --pool stratum+tcp://fr.vipor.net:5077 --address xel:VOTRE_ADRESSE > hashpulse.log 2>&1 &
+```
+
+---
+
 <div align="center">
 
 **HashPulse v1.0.0** — Mineur Xelis avec support CPU & GPU OpenCL
 
-XelisHash V3 · Dev Tax configurable · Solo & Pool Mining
+XelisHash V3 · Dev Tax configurable · Solo & Pool Mining · Windows & Linux
 
 </div>
