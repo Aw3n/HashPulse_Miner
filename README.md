@@ -41,8 +41,8 @@ HashPulse est un mineur Xelis performant supportant à la fois le **CPU** et le 
 | | |
 |---|---|
 | **Nom** | `HashPulse-linux-x86_64` (CPU) · `HashPulse-linux-x86_64-gpu` (CPU+GPU) |
-| **Taille** | ~4.1 MB · ~4.7 MB |
-| **Compatibilité** | Toutes distributions, 100 % statique (musl), zéro dépendance |
+| **Taille** | ~4.1 MB · ~3.6 MB |
+| **Compatibilité** | Toutes distributions (voir [section 8](#8-linux-toutes-distributions)) |
 
 ---
 
@@ -262,17 +262,20 @@ Au démarrage, HashPulse détecte et liste tous les GPU OpenCL disponibles avec 
 
 ## 8. Linux (toutes distributions)
 
-Deux binaires Linux sont fournis, **100 % statiques (musl)** : aucune dépendance, ils fonctionnent sur Ubuntu, Debian, Arch, CentOS, Fedora, Alpine, NixOS… y compris les serveurs sans interface graphique.
+| Fichier | Usage | Compatibilité |
+|---|---|---|
+| `HashPulse-linux-x86_64` | CPU uniquement | **100 % statique (musl), zéro dépendance** : Ubuntu, Debian, Arch, Fedora, CentOS/RHEL, Alpine, NixOS, vieux serveurs… testé et validé |
+| `HashPulse-linux-x86_64-gpu` | CPU + GPU (OpenCL) | glibc ≥ 2.17 (CentOS 7+, Ubuntu 14.04+, Debian 8+, Arch, Fedora). Nécessite le runtime OpenCL du système |
 
-| Fichier | Usage |
-|---|---|
-| `HashPulse-linux-x86_64` | CPU uniquement, zéro dépendance |
-| `HashPulse-linux-x86_64-gpu` | CPU + GPU (OpenCL) — le loader ICD est embarqué, il charge le pilote NVIDIA/AMD/Intel à l'exécution |
+Les deux binaires ont été **validés en conditions réelles** (minage sur pool, shares acceptées) sous Ubuntu 24.04 et Alpine 3.24, avec détection/pilotage OpenCL complet vérifié.
 
 ### Démarrage rapide
 
 ```bash
-chmod +x HashPulse-linux-x86_64-gpu
+chmod +x HashPulse-linux-x86_64*
+# CPU (recommandé — XelisHash V3 favorise le CPU) :
+./HashPulse-linux-x86_64 --pool stratum+tcp://fr.vipor.net:5077 --address xel:VOTRE_ADRESSE --worker rig_01
+# CPU + GPU :
 ./HashPulse-linux-x86_64-gpu --gpu --pool stratum+tcp://fr.vipor.net:5077 --address xel:VOTRE_ADRESSE --worker rig_01
 ```
 
@@ -280,17 +283,16 @@ Toutes les options de la [section 3](#3-toutes-les-options) sont identiques sous
 
 ### Prérequis GPU sous Linux
 
-Le binaire `-gpu` embarque le loader OpenCL ; seul le pilote de votre carte est requis :
+Le binaire `-gpu` utilise le loader OpenCL standard de la distribution (`libOpenCL.so.1`), normalement déjà présent avec le pilote :
 
-- **NVIDIA** : pilote propriétaire standard (nvidia-driver)
-- **AMD** : `rocm-opencl-runtime` ou ROCm
-- **Intel** : `intel-opencl-icd`
+- **NVIDIA** : pilote propriétaire (installe `libnvidia-opencl.so` + l'ICD)
+- **AMD** : `rocm-opencl-runtime` (ou Mesa/RADV `mesa-opencl` pour GPU récents)
+- **Intel** : `intel-opencl-icd` (ou `intel-compute-runtime`)
 
-Vérifiez la détection avec :
+Si aucune plateforme OpenCL n'est trouvée, HashPulse **bascule automatiquement en CPU-only** avec un message d'avertissement (aucun crash).
 
-```bash
-./HashPulse-linux-x86_64-gpu --gpu --pool stratum+tcp://fr.vipor.net:5077 --address xel:VOTRE_ADRESSE
-```
+> Sans interface graphique (serveur headless), préférez le binaire CPU.
+> GPU non disponible sur Alpine (musl) et NixOS (FHS) — le binaire CPU y fonctionne parfaitement.
 
 ### Niveau de log (bash)
 
@@ -301,7 +303,7 @@ RUST_LOG=info ./HashPulse-linux-x86_64-gpu --gpu --pool stratum+tcp://fr.vipor.n
 ### Exécution en arrière-plan (serveur)
 
 ```bash
-nohup ./HashPulse-linux-x86_64-gpu --gpu --pool stratum+tcp://fr.vipor.net:5077 --address xel:VOTRE_ADRESSE > hashpulse.log 2>&1 &
+nohup ./HashPulse-linux-x86_64 --pool stratum+tcp://fr.vipor.net:5077 --address xel:VOTRE_ADRESSE > hashpulse.log 2>&1 &
 ```
 
 ---
