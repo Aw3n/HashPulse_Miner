@@ -2,7 +2,7 @@
 
 **Mineur Xelis, DragonX, Parano1d, Blocknet et Firo — CPU & GPU (OpenCL)**
 
-![version](https://img.shields.io/badge/version-1.0.0-00c89b)
+![version](https://img.shields.io/badge/version-2.0.0-00c89b)
 ![support](https://img.shields.io/badge/CPU%20%2B%20GPU-00d4ff)
 ![dev tax](https://img.shields.io/badge/Dev%20Tax-1%25-ffa500)
 
@@ -11,7 +11,7 @@ HashPulse est un mineur performant supportant à la fois le **CPU** et le **GPU 
 | Coin | Algorithme | Format d'adresse | Moteur de hash |
 |------|------------|------------------|----------------|
 | Xelis (`--coin xelis`) | XelisHash V3 | `xel:...` ou adresse brute | disponible |
-| DragonX (`--coin dragonx`, `drgx`) | RandomX, configuration Arrakis | `zs1...` (78 caractères) | pas encore dans ce build |
+| DragonX (`--coin dragonx`, `drgx`) | RandomX, configuration Hush | `zs1...` (78 caractères) | disponible (CPU) |
 | Parano1d (`--coin parano1d`, `noid`) | Poseidon2b | `o1...` (60 caractères) | disponible (CPU) |
 | Blocknet (`--coin blocknet`, `bnt`) | Argon2id (2 GiB) | base58, 64 ou 68 octets décodés | disponible (CPU) |
 | Firo (`--coin firo`, `xpm`) | FiroPoW (ProgPoW 0.9.4, programmes d'un bloc) | base58check `a…` (mainnet) ou `t…` (testnet), 34 caractères | disponible (CPU) |
@@ -102,6 +102,17 @@ HashPulse.exe --coin firo --pool stratum+tcp://pool.woolypooly.com:3104 --addres
 Le protocole est le Stratum « mode 0 » de Firo : la cible de part arrive dans chaque
 `mining.notify`, et une part demande le `mix_hash` en plus du nonce — ce que seul un
 moteur FiroPoW correct peut fournir.
+
+### Pool Mining — DragonX (RandomX, configuration Hush)
+
+```powershell
+HashPulse.exe --coin dragonx --pool stratum+tcp://pool.dragonx.is:3433 --address VOTRE_ADRESSE_DRAGONX --threads 4
+```
+
+`--coin` est facultatif : une adresse `zs1…` désigne DragonX à elle seule. `:3433` pour les
+petites rigs, `:3434` au-delà de 10 kH/s. RandomX rend ~10 H/s par thread, et la RAM suit mal :
+266 MiB resident pour un thread, 281 MiB pour huit (~2 MiB par thread, le cache d'époque de
+256 MiB étant partagé). HashPulse réduit `--threads` si la RAM libre ne couvre pas le cache.
 
 ### Pool Mining — Vipor (France)
 
@@ -197,7 +208,7 @@ Définit un nom de worker personnalisé pour identifier votre rig sur le pool.
 | `--gpu-ids <IDS>` | IDs des GPU à utiliser (séparés par virgule) | `0` |
 | `--gpu-intensity <N>` | Work-items par GPU (~531 KB VRAM chacun). Plus = plus de hashrate | auto (2048) |
 | `--dev-fee <PERCENT>` | Pourcentage de la dev tax (minage pour le développeur) | `1.0` |
-| `--user-agent <NAME>` | User-agent du mineur (certains pools exigent un nom whitelisté, ex : `rigel/1.4.5` pour GrandPool) | `HashPulse/1.0.0` |
+| `--user-agent <NAME>` | User-agent du mineur (certains pools exigent un nom whitelisté, ex : `rigel/1.4.5` pour GrandPool) | `HashPulse/2.0.0` |
 | `--no-ssl-verify` | Accepte n'importe quel certificat TLS (pools Parano1d auto-signés, ex : LPRoute) | vérification activée |
 | `--api-token <HEX>` | Jeton de l'API HTTP du core Blocknet | lu dans `api.cookie` |
 | `--api-cookie <CHEMIN>` | Fichier `api.cookie` du core, si le nœud n'est pas à l'emplacement par défaut | répertoire du nœud |
@@ -235,10 +246,17 @@ Définit un nom de worker personnalisé pour identifier votre rig sur le pool.
 | GrandPool | Kazakhstan (Almaty) | `stratum+tcp://kz.grandpool.io:2025` |
 | GrandPool | USA (New York) | `stratum+tcp://us.grandpool.io:2025` |
 
-### DragonX (RandomX Arrakis)
+### DragonX (RandomX, configuration Hush)
 
-Le réseau DragonX se mine en CPU (RandomX est volontairement réfractaire aux GPU). Ces
-endpoints sont ceux publiés par les pools ; ils ne sont pas encore utilisables par HashPulse.
+Le réseau DragonX se mine en CPU (RandomX est volontairement réfractaire aux GPU) : les
+options `--gpu` sont ignorées et le moteur utilise les paramètres Hush — sel d'Argon2
+`RandomXHUSH\x03`, 5 itérations, programmes de 512 instructions, 4096 itérations et 16
+programmes par hash. Le moteur tourne en *light mode* : un cache d'époque de 256 MiB construit
+en quelques secondes et partagé par tous les threads, ~2 MiB de plus par thread, et aucun
+dataset de 1 Go à construire. Un changement de clé ne stoppe pas la
+recherche. Le format de job est celui des pools Zelcore/XMRig (`login`, `job`, `submit`,
+`target` 8 ou 4 octets en hexadécimal, `nonce` de 32 octets), et une part est jugée sur le
+double SHA-256 du header et du hash RandomX — pas sur le hash RandomX seul.
 
 | Pool | Usage | URL Stratum |
 |------|-------|-------------|
@@ -246,6 +264,38 @@ endpoints sont ceux publiés par les pools ; ils ne sont pas encore utilisables 
 | DragonX officiel | grosses rigs | `stratum+tcp://pool.dragonx.is:3434` |
 | DragonX officiel | solo | `stratum+tcp://pool.dragonx.is:3435` |
 | BTC3Forge | global | `stratum+tcp://btc3forge.com:3335` |
+
+Le minage solo DragonX n'est pas implémenté : un nœud DRGX ne fournit rien à interroger
+pour un mineur CPU, il faut passer par `--pool`.
+
+Réglages mesurés sur `pool.dragonx.is:3433` (Ryzen 7 5700X, 2026-11-06) :
+
+- **46-60 H/s à 4 threads, 140-165 H/s à 16** — RandomX se compte en hachures par
+  seconde, pas en kH/s : ~10 H/s par thread. La RAM n'est pas le facteur limitant :
+  266 MiB residents à 1 thread, 281 MiB à 8, le cache d'époque de 256 MiB étant partagé.
+- **16 parts acceptées, 0 rejetée en 671 s** à 4 threads (54 jobs suivis, 23 hauteurs,
+  première part 115 s après la connexion). Le pool a monté la difficulté de part de
+  1 072 à 2 145 puis 15 000 en cours de route, et à 3 750 lors du second essai
+  (16 threads, 260 s, 1 part acceptée / 0 rejetée) : le client s'adapte à chaque
+  `target` sans reconnexion, et c'est ce qui prouve que la cible lue est la bonne.
+- **Une digest de référence ancré** : le header de 140 octets `(0..140)` haché sous la
+  clé d'exemple donne `5607a326eb9337d519c400c577891ec43fab02997deda2e42baf8b41f74981c0`,
+  identique par le JIT, par l'interpréteur (`flags = 0`) et par la voie pipelinée
+  `hash_first`/`hash_next`/`hash_last`. Contre-preuve : passer `RANDOMX_JUMP_BITS`
+  de 8 à 7 — une macro que le build ne vérifie pas — fait rougir ce test, donc le
+  digest atteste bien des paramètres Hush et pas d'un chemin de repli.
+- **Un défaut relevé par la preuve live elle-même** : au troisième essai (4 threads,
+  301 s, 8 parts acceptées), le pool a répondu `Duplicate share` à une part déjà payée.
+  Le compteur de nonces repartait de l'indice du worker à chaque job, donc un simple
+  changement de `target` sur la même hauteur re-soumettait les nonces déjà comptés. Le
+  curseur est maintenant unique, partagé par tous les threads, et ne revient jamais en
+  arrière ; le test de non-régression rougit `[0, 1, 0, 1]` si on lui rend l'ancien
+  comportement. Re-épreuve sur le binaire corrigé : **20 parts acceptées, 0 rejetée en
+  641 s** à 4 threads (46 jobs, 18 hauteurs, 51-61 H/s, `target` passé de 1 000 à 7 500
+  en cours de hauteur), et aucun nonce soumis deux fois.
+- `--gpu` est ignoré (RandomX est CPU-only par construction), et rien ici ne vient du
+  code GPL d'XMRig : les cinq paramètres Hush sont portés dans l'arbre RandomX
+  BSD-3-Clause vendoré (`randomx-c/`), patché de 20 lignes dans un seul fichier.
 
 ### Parano1d (Poseidon2b)
 
@@ -262,9 +312,6 @@ Stratum Parano1d parle TLS (rustls) et accepte `stratum+ssl://`, `stratum+tls://
 pour ce pool. Le minage solo Parano1d n'est pas implémenté (pas de client RPC vers un
 nœud), et le moteur Poseidon2b est CPU uniquement — les options `--gpu` sont ignorées.
 
-DragonX reste sans moteur de hash dans ce build : HashPulse refuse de démarrer au lieu
-de soumettre des parts invalides.
-
 ### Firo (FiroPoW)
 
 | Pool | Usage | URL Stratum |
@@ -275,7 +322,7 @@ de soumettre des parts invalides.
 | Cedric-Crispin | Asie, TLS | `stratum+ssl://firo.cedric-crispin.com:4065` |
 
 ```powershell
-HashPulse.exe --coin firo --pool stratum+tcp://pool.woolypooly.com:3104 --address aJ9dVOTRE_ADRESSE_FIRO --worker rig_01
+HashPulse.exe --coin firo --pool stratum+tcp://pool.woolypooly.com:3104 --address VOTRE_ADRESSE_FIRO --worker rig_01
 ```
 
 Le mode 0 du protocole (un seul hash par part, le job fournit l'en-tête complet) est ce
@@ -362,21 +409,12 @@ Définit la dev tax à 2 %. Le minimum est 0.5 % et le maximum 5 %.
 
 ### Adresse payée par la taxe
 
-La wallet dépend du coin miné :
-
-| Coin | Adresse de la dev tax |
-|------|-----------------------|
-| Xelis | `xel:6mmj85x7504h3z9qwendxhahc4804xgrek59rec3zhhexcdywe8qqvnypnh` |
-| DragonX | `zs1qv63azqnc8cyghta8pf78d2e0py8s2s9r9kftxhkmjtaaxcq4g9u2q2n7l56n56gd2w4ut8pwyf` |
-| Parano1d | `o14yy6k7905ek2klan5w6krp4xsk460q9lme2c98zrcm7mf45qm7jst7ny23` |
-| Blocknet | `97WGoZDBzeN2eRwwxBRH8KMdJAQ8xE6bNjKuctFUwcTx6SS4rzeHnuiSn1oirYVJRiWbvtHaJzvYtWo4tWJtrUBCf22YL` |
-| Firo | `aJ9dSKA6Rvpw42yasYPjKXak9kP2ti8wj9` |
-
-L'adresse utilisée est affichée au démarrage (`Dev Fee: 1.0% -> ...`) et dans `--help`.
-C'est le wallet du coin réellement miné qui est payé : en solo Blocknet, le core reçoit un
-`blocktemplate` dont le coinbase pointe vers ce wallet pendant les quelques secondes de la phase
-développeur, puis revient à votre adresse. Un wallet mainnet est vérifié à la construction : une
-adresse testnet ou une faute de frappe est refusée avant le premier bloc perdu.
+Le wallet payé dépend du coin miné : l'adresse réellement utilisée est affichée au
+démarrage (`Dev Fee: 1.0% -> ...`). En solo Blocknet, le core reçoit un `blocktemplate`
+dont le coinbase pointe vers ce wallet pendant les quelques secondes de la phase
+développeur, puis revient à votre adresse. Un wallet mainnet est vérifié à la
+construction : une adresse testnet ou une faute de frappe est refusée avant le premier
+bloc perdu.
 
 ---
 
@@ -445,7 +483,7 @@ Au démarrage, HashPulse détecte et liste tous les GPU OpenCL disponibles avec 
 
 <div align="center">
 
-**HashPulse v1.0.0** — Mineur Xelis avec support CPU & GPU OpenCL
+**HashPulse v2.0.0** — Mineur Xelis, DragonX, Parano1d, Blocknet et Firo avec support CPU & GPU OpenCL
 
 XelisHash V3 · Dev Tax configurable · Solo & Pool Mining
 
