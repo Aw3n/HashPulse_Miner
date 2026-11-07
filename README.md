@@ -321,13 +321,20 @@ Réglages mesurés sur `pool.dragonx.is:3433` (Ryzen 7 5700X, 2026-11-06) :
 | InnovLab | Europe, TLS (testé) | `stratum+ssl://eu2.innovlab.cc:19601` |
 | InnovLab | global, sans TLS | `stratum+tcp://noid.innovlab.cc:9600` |
 | Suprnova | global, TLS | `stratum+ssl://noid.suprnova.cc:3341` |
+| Suprnova | global, sans TLS | `stratum+tcp://noid.suprnova.cc:3337` |
 | LPRoute | Russie, TLS (certificat auto-signé) | `stratum+ssl://ru.lproute.com:3338` |
 
 Le protocole `parano1d-stratum-v1` est en **TLS pour deux de ces pools**, donc le client
 Stratum Parano1d parle TLS (rustls) et accepte `stratum+ssl://`, `stratum+tls://` et
 `stratum+tcp://`. LPRoute utilise un certificat auto-signé : ajouter `--no-ssl-verify`
-pour ce pool. Le minage solo Parano1d n'est pas implémenté (pas de client RPC vers un
+pour ce pool — sans cette option, l'erreur nomme l'option à ajouter au lieu de
+se répéter indéfiniment. Le minage solo Parano1d n'est pas implémenté (pas de client RPC vers un
 nœud), et le moteur Poseidon2b est CPU uniquement — les options `--gpu` sont ignorées.
+
+Chaque `mining.notify` porte `expires_in_seconds`, la fenêtre pendant laquelle le pool
+paie ce job. Le client la respecte : sans nouvelle assignation avant l'échéance, la
+session se termine et se renouvelle au lieu de chercher un job mort indéfiniment. Mesuré
+(2026-11-07) : LPRoute 28 s, Suprnova 36-89 s, InnovLab 257-298 s.
 
 Le moteur CPU pré-absorbe le préfixe du patron : les cinq blocs qui précèdent le nonce
 atteignent le même état d'éponge pour tous les candidats, donc un candidat ne coûte plus
@@ -339,16 +346,30 @@ d'origine — la vitesse ne vient pas d'un hash différent. Contre-preuves : les
 de `src/noid/batch.rs` comparent octet à octet les 256 nonces d'un lot au chemin packé
 d'origine et au chemin scalaire de consensus.
 
-Preuve live sur `eu2.innovlab.cc:19601` (TLS, 16 threads, 704 s, 7 novembre 2026) :
-**59 parts acceptées, aucune rejetée par le pool**, 23 jobs suivis de la hauteur 287 886
-à 287 908, hashrate affiché 2,70-3,02 MH/s aux fenêtres de 10 s et cycles
+Preuve live sur `eu2.innovlab.cc:19601` (TLS, 16 threads, 704 s, 7 novembre 2026 à 04:15,
+sur la build `7bd2588f5c8f…` de 5 215 232 octets, antérieure aux octets livrés ce soir) :
+**59 parts acceptées, aucune rejetée par le pool**, 23 jobs suivis de
+la hauteur 287 886 à 287 908, hashrate affiché 2,70-3,02 MH/s aux fenêtres de 10 s et cycles
 « canonical-tip-unverified » repris sans reconnexion. Le compteur « Rejected » de la
 session vaut 1 : une part résolue sur un job supersédé pendant les 200 ms de la pause a
-été écartée par le client avant l'envoi, ce qui est le comportement attendu. Le binaire
-Linux statique livré (`HashPulse-linux-x86_64`, 4 576 216 octets, sha256 `2b3960777809…`)
-rend la même chose sur ses propres octets : 2,43-2,76 MH/s à 16 threads, 4 parts acceptées
-et 0 rejetée en 160 s, six hauteurs suivies de 289 323 à 289 329 et deux pauses
-« canonical-tip-unverified » reprises sans reconnexion (`proofs/noid-linux-live-v2.log`).
+été écartée par le client avant l'envoi, ce qui est le comportement attendu.
+
+Les deux mesures qui suivent sont jouées sur les octets livrés ce soir.
+
+Windows — `HashPulse.exe`, 5 237 248 octets, sha256 `39db1d0ca147…`, 2 threads :
+`noid.suprnova.cc:3337` en TCP nu donne 7 ouvrages sur les hauteurs 289 986 à 289 991 (dont une
+réémission à 289 988) et **2 parts acceptées, 0 rejetée** à ~750 KH/s en 116 s
+(`proofs/run-noid-suprnova-plain.err.log`) ; `eu2.innovlab.cc:19601` en TLS sur ces mêmes octets
+donne 6 ouvrages des mêmes hauteurs et **2 parts acceptées, 0 rejetée** en 110 s
+(`proofs/run-noid-innovlab-tls.err.log`). Aucune des deux sessions ne déclenche la garde
+d'expiration : les deux pools renvoient un job bien avant leur propre fenêtre.
+
+Linux statique — `HashPulse-linux-x86_64`, 4 579 048 octets, sha256 `8e7f300e5d82…`,
+16 threads : 160 s sur `eu2.innovlab.cc:19601` rend 2,75-2,97 MH/s, 6 jobs de la hauteur
+289 999 à 290 004, **2 parts acceptées, 0 rejetée** et cinq pauses
+« canonical-tip-unverified » reprises sans reconnexion ; 90 s sur le port TCP nu
+`noid.suprnova.cc:3337` rend 2,78-2,90 MH/s, 4 jobs de 290 004 à 290 007 et
+**8 parts acceptées, 0 rejetée**, zéro reconnexion (`proofs/noid-linux-live-v3.log`).
 
 Le GPU n'accélère pas ce coin, et ce n'est pas un choix de confort : le mineur de
 référence `noid-gpu-amd` ne publie que des binaires, et l'arborescence Apache-2.0 du dépôt
@@ -590,8 +611,8 @@ Au démarrage, HashPulse détecte et liste tous les GPU OpenCL disponibles avec 
 
 | Binaire | Identité | `file` | `ldd` | `grep -ac OpenCL` |
 |---|---|---|---|---|
-| `HashPulse-linux-x86_64` | 4 576 216 o, sha256 `2b3960777809…` | ELF 64-bit LSB executable, **statically linked**, stripped | `not a dynamic executable` | 0 |
-| `HashPulse-linux-x86_64-gpu` | 5 008 704 o, sha256 `1c88816d023e…` | ELF 64-bit LSB **pie** executable, dynamically linked, interpreter `/lib64/ld-linux-x86-64.so.2`, for GNU/Linux 2.0.0 | `libOpenCL.so.1`, `libm.so.6`, `libc.so.6`, `libpthread.so.0`, `libdl.so.2` | 16 |
+| `HashPulse-linux-x86_64` | 4 579 048 o, sha256 `8e7f300e5d82…` | ELF 64-bit LSB executable, **statically linked**, stripped | `not a dynamic executable` | 0 |
+| `HashPulse-linux-x86_64-gpu` | 5 015 632 o, sha256 `d0aa02e60a47…` | ELF 64-bit LSB **pie** executable, dynamically linked, interpreter `/lib64/ld-linux-x86-64.so.2`, for GNU/Linux 2.0.0 | `libOpenCL.so.1`, `libm.so.6`, `libc.so.6`, `libpthread.so.0`, `libdl.so.2` | 16 |
 
 Ces relevés sont pris sur les octets livrés, dans WSL2 Ubuntu avec le noyau
 `6.6.87.2-microsoft-standard-WSL2` (`proofs/linux-runtime-facts.log`). Le comptage
@@ -649,14 +670,22 @@ proprement les threads et rend la main. C'est ce que font les harnais de preuve 
   fait office d'installation.
 
 Une carte réellement visible par OpenCL sous Linux n'a pas été testée ici : le kernel GPU est
-mesuré sur Windows (`proofs/gpu-live-*.log`), et `1c88816d023e` n'a jamais été lancé contre un
-GPU (`proofs/linux-recert-2026-11-07.md` se termine sur cette lacune).
+mesuré sur Windows (`proofs/gpu-live-*.log`), et `d0aa02e60a47…` — comme `1c88816d023e…` avant
+lui — n'a jamais été lancé contre un GPU : WSL Ubuntu-24.04 n'expose aucun ICD OpenCL sur cette
+machine (`proofs/linux-recert-2026-11-07.md` se termine sur cette lacune).
 
-### Ce qui a été relancé sur ces octets
+### Ce qui a été relancé, et sur quels octets
+
+Les deux lignes Parano1d sont jouées sur les octets livrés (build du 7 novembre 21:52, sha256
+`8e7f300e5d82…`). Les lignes DragonX et Blocknet ont été jouées sur la build précédente du même
+binaire (4 576 216 octets, sha256 `2b3960777809…`) et n'ont pas été rejouées depuis : depuis la
+build de 16:04, aucun fichier de `src/drgx/` ni de `src/blocknet/` n'a été touché et le registre
+partagé `coin.rs` n'a changé que dans la liste des pools Parano1d.
 
 | Moteur | Pool | Réglage | Débit | Parts |
 |---|---|---|---|---|
-| Parano1d | `eu2.innovlab.cc:19601` (TLS) | 16 threads, 160 s | 2,43–2,76 MH/s | 4 acceptées, 0 rejetée (`proofs/noid-linux-live-v2.log`) |
+| Parano1d | `eu2.innovlab.cc:19601` (TLS) | 16 threads, 160 s | 2,75–2,97 MH/s | 2 acceptées, 0 rejetée (`proofs/noid-linux-live-v3.log`) |
+| Parano1d | `noid.suprnova.cc:3337` (TCP nu) | 16 threads, 90 s | 2,78–2,90 MH/s | 8 acceptées, 0 rejetée (`proofs/noid-linux-live-v3.log`) |
 | DragonX | `pool.dragonx.is:3433` | 16 threads, 305 s | 147–159 H/s | 7 acceptées, 0 rejetée (`proofs/linux-dragonx-v2-16t.log`) |
 | DragonX | `pool.dragonx.is:3433` | 6 threads, 305 s | 85 H/s | 19 acceptées, 0 rejetée (`proofs/linux-dragonx-v2.log`) |
 | Blocknet | `bntpool.com:3333` | 1 thread (auto, RAM), 480 s | 0,30–0,40 H/s | 3 acceptées, 0 rejetée (`proofs/linux-blocknet-v2.log`) |
@@ -680,8 +709,9 @@ Dépendances d'une seule traite (bloc d'en-tête du script) : `build-essential` 
 `pkg-config`, les targets rustup `x86_64-unknown-linux-musl` et `x86_64-unknown-linux-gnu`,
 zig 0.16.0 et `cargo-zigbuild`. Zig est obligatoire, pas décoratif : RandomX est du C++ et il
 n'existe pas de g++ musl, donc `zig c++` est le seul driver à porter les en-têtes C++ et une
-libc++ pour musl. La build est reproductible à l'octet près : deux exécutions successives ont
-redonné `2b3960777809…` et `1c88816d023e…`.
+libc++ pour musl. La build est reproductible à l'octet près : reprise le 7 novembre à 22:11 sur
+les octets livrés, elle a redonné `8e7f300e5d82…` et `d0aa02e60a47…`, c'est-à-dire les deux
+fichiers bit à bit identiques à ceux de l'archive (`proofs/linux-repro-rebuild.log`).
 
 ---
 
