@@ -188,7 +188,9 @@ Utilise 4 threads CPU + le GPU simultanément. Par défaut avec `--gpu`, le CPU 
 HashPulse.exe --pool stratum+tcp://fr.vipor.net:5077 --address xel:VOTRE_ADRESSE --gpu --gpu-intensity 2048
 ```
 
-Fixe le nombre de work-items GPU (chaque work-item utilise ~531 KB de VRAM). **2048 est le sweet spot** validé sur GTX 1060 (voir [section 7](#7-guide-gpu-opencl)).
+Fixe le nombre de work-items GPU (chaque work-item utilise ~531 KB de VRAM). Le mode `auto`
+est recommandé : il vise le plafond d'allocation unique de la carte, moins un work-group —
+2880 work-items (1 493 Mo) sur la GTX 1060 6 Go mesurée, voir [section 7](#7-guide-gpu-opencl).
 
 ### GPU multiples
 
@@ -220,7 +222,7 @@ Définit un nom de worker personnalisé pour identifier votre rig sur le pool.
 | `--threads <N>` | Nombre de threads CPU pour le minage | auto (nb cœurs, GPU : 0) |
 | `--gpu` | Active le minage GPU OpenCL (désactive le CPU par défaut) | désactivé |
 | `--gpu-ids <IDS>` | IDs des GPU à utiliser (séparés par virgule) | `0` |
-| `--gpu-intensity <N>` | Work-items par GPU (~531 KB VRAM chacun). Plus = plus de hashrate | auto (2048) |
+| `--gpu-intensity <N>` | Work-items par GPU (~531 KB VRAM chacun). Plus = plus de hashrate | auto : plafond d'allocation unique − 1 work-group (2880 sur GTX 1060 6 Go) |
 | `--dev-fee <PERCENT>` | Pourcentage de la dev tax (minage pour le développeur) | `1.0` |
 | `--user-agent <NAME>` | User-agent du mineur (certains pools exigent un nom whitelisté, ex : `rigel/1.4.5` pour GrandPool) | `HashPulse/2.0.0` |
 | `--no-ssl-verify` | Accepte n'importe quel certificat TLS (pools Parano1d auto-signés, ex : LPRoute) | vérification activée |
@@ -342,9 +344,10 @@ Preuve live sur `eu2.innovlab.cc:19601` (TLS, 16 threads, 704 s, 7 novembre 2026
 « canonical-tip-unverified » repris sans reconnexion. Le compteur « Rejected » de la
 session vaut 1 : une part résolue sur un job supersédé pendant les 200 ms de la pause a
 été écartée par le client avant l'envoi, ce qui est le comportement attendu. Le binaire
-Linux statique (`HashPulse-linux-x86_64`, sha256 `9632dc3f4e4d…`) rend la même chose :
-2,90-3,14 MH/s à 16 threads après une première fenêtre à 1,95 MH/s, 8 parts acceptées et
-0 rejetée en 160 s (`proofs/noid-linux-live.log`).
+Linux statique livré (`HashPulse-linux-x86_64`, 4 576 216 octets, sha256 `2b3960777809…`)
+rend la même chose sur ses propres octets : 2,43-2,76 MH/s à 16 threads, 4 parts acceptées
+et 0 rejetée en 160 s, six hauteurs suivies de 289 323 à 289 329 et deux pauses
+« canonical-tip-unverified » reprises sans reconnexion (`proofs/noid-linux-live-v2.log`).
 
 Le GPU n'accélère pas ce coin, et ce n'est pas un choix de confort : le mineur de
 référence `noid-gpu-amd` ne publie que des binaires, et l'arborescence Apache-2.0 du dépôt
@@ -518,21 +521,57 @@ Affiche toutes les options et exemples directement dans le terminal.
 | `--gpu-intensity 512` | ~266 MB |
 | `--gpu-intensity 1024` | ~531 MB |
 | `--gpu-intensity 2048` | ~1.06 GB |
-| `--gpu-intensity 2560` | ~1.33 GB |
-| Par défaut (auto) | calculé selon `MaxMemAllocSize` du GPU (plafonné à 2048) |
+| `--gpu-intensity 2880` (défaut auto sur GTX 1060 6 Go) | ~1.46 GB |
+| Par défaut (auto) | plafond d'allocation unique du GPU, moins un work-group, écrêté à 2944 |
 
 ### Intensité optimale (retour terrain — GTX 1060 6 Go)
 
-Un balayage complet de `--gpu-intensity` a montré que le débit réel monte avec l'occupation GPU jusqu'à ~2048 work-items, puis plafonne :
+Le balayage `gpu_bench` (chaque point validé par un digest de contrôle avant la mesure) donne
+la courbe débit / occupation du kernel actuel :
 
-| Intensité | Débit réel | Gain vs 1024 |
-|-----------|------------|--------------|
-| 1024 | ~410 H/s | référence |
-| 1536 | ~530 H/s | +29 % |
-| **2048** (défaut) | **~614 H/s** | **+50 %** |
-| 2560 | ~625 H/s | +2 % (plateau) |
+| Work-items | Débit réel | Évolution |
+|------------|------------|-----------|
+| 512 | ~386 H/s | référence |
+| 1024 | ~684 H/s | +77 % |
+| 1536 | ~853 H/s | +25 % |
+| 2048 | ~940 H/s | +10 % |
+| 2560 | ~1048 H/s | +11 % |
+| 2944 | ~1077 H/s | +3 % (plafond d'allocation de la carte) |
 
-**2048 est donc le défaut** : meilleur compromis débit / stabilité / marge VRAM. Sur les cartes plus petites, la valeur auto est automatiquement bornée par la VRAM disponible.
+La courbe monte encore à 2944, qui est le maximum tenant dans une seule allocation
+(2944 × 531 KB = 1526 Mo sur les 1535 Mo autorisés) : le défaut `auto` vise donc ce plafond
+moins un work-group au lieu de l'ancien 2560. Une carte plus petite est bornée par son propre
+plafond ; `--gpu-intensity` reste l'option pour imposer une valeur.
+
+### Ce que mesure le noyau (A/B compilateur, GTX 1060 6 Go, 2560 work-items)
+
+`xelis_gpu_ab` compile le kernel livré plusieurs fois — une par jeu d'options OpenCL — et les
+intercale sur les mêmes buffers ; chaque variante est d'abord contrôlée contre le moteur CPU
+`xelis-hash` v3, donc un gain ne peut pas venir d'un digest différent. Les débits absolus
+dépendent de l'horloge GPU au moment de la mesure : les dix rounds des cinq sessions du
+7 novembre 2026 sont donc donnés ensemble, et seuls les rapports sont reproductibles.
+
+| Variante | Débit | Rapport à la référence, d'un round à l'autre |
+|----------|-------|----------------------------------------|
+| divisions 128 bits bit-serial (l'ancien kernel) — référence | 598–674 H/s | ×1 |
+| divisions 128 bits par limbs (Knuth D) — **kernel livré** | 927–1053 H/s | **×1,54–1,59** (moyenne des 8 paires : ×1,57) |
+| divisions retirées (sonde de plafond, ne hache pas) | 1625–1791 H/s | ×2,63–2,77 (moyenne des 8 paires : ×2,70) |
+
+Sur les six rounds où les trois variantes ont été jouées côte à côte, le kernel livré supprime
+56–59 % du temps que la sonde attribue aux divisions larges — calcul en temps par hachure
+(1 / débit) à partir des trois débits, pas une mesure directe. Le reste n'est pas décomposé : la
+piste suivante identifiée — les cinq divisions 64 bits que compte chaque appel 128/64 dans le
+noyau, qu'un inverse de diviseur précalculé transformerait en multiplications — n'a pas encore
+été mesurée sur cette carte.
+
+```powershell
+cargo run --release --features gpu --bin div_gate
+```
+
+`div_gate` est la porte d'exactitude de ces divisions : deux variantes vertes comparées au
+`u128` Rust sur 8 000 000 de valeurs, cinq mutations plantées qui doivent rougir, et deux
+branches tenues pour inatteignables dont la suppression doit rester équivalente — la claim
+« code mort » est ainsi jouée, pas assertée.
 
 ### Tester la détection GPU
 
