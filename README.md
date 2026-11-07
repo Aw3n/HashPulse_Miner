@@ -6,7 +6,7 @@
 ![support](https://img.shields.io/badge/CPU%20%2B%20GPU-00d4ff)
 ![dev tax](https://img.shields.io/badge/Dev%20Tax-1%25-ffa500)
 
-HashPulse est un mineur performant supportant à la fois le **CPU** et le **GPU (OpenCL)**, le minage **solo** (daemon) et le minage en **pool** (Stratum).
+HashPulse est un mineur performant supportant à la fois le **CPU** et le **GPU (OpenCL)**, le minage **solo** (daemon) et le minage en **pool** (Stratum ; protocole JSON-lines pour Blocknet).
 
 | Coin | Algorithme | Format d'adresse | Moteur de hash |
 |------|------------|------------------|----------------|
@@ -40,7 +40,7 @@ intégré, HashPulse refuse de démarrer au lieu de soumettre des parts invalide
 | | |
 |---|---|
 | **Nom (Windows)** | `HashPulse.exe` |
-| **Taille** | ~4,7 MB |
+| **Taille** | ~5,2 MB |
 | **Support GPU** | OpenCL inclus dans le binaire |
 | **Nom (Linux)** | `HashPulse-linux-x86_64` (CPU, statique musl) et `HashPulse-linux-x86_64-gpu` (CPU+GPU, glibc ≥ 2.17) |
 
@@ -113,6 +113,20 @@ HashPulse.exe --coin dragonx --pool stratum+tcp://pool.dragonx.is:3433 --address
 petites rigs, `:3434` au-delà de 10 kH/s. RandomX rend ~10 H/s par thread, et la RAM suit mal :
 266 MiB resident pour un thread, 281 MiB pour huit (~2 MiB par thread, le cache d'époque de
 256 MiB étant partagé). HashPulse réduit `--threads` si la RAM libre ne couvre pas le cache.
+
+### Pool Mining — Blocknet (BNTPool)
+
+```powershell
+HashPulse.exe --coin blocknet --pool stratum+tcp://bntpool.com:3333 --address VOTRE_ADRESSE_BLOCKNET --worker rig_01
+```
+
+Le protocole n'est pas Stratum : ce sont les lignes JSON du mineur officiel `seine`
+(`login` avec capacités, `job` avec `header_base`, `target` et une plage de nonces, `submit`
+avec le `claimed_hash`, `refill` en fin de plage). Mesuré sur 700 s avec un seul thread :
+**4 parts acceptées, 0 rejetée, première part 23 s après le login**, 11 jobs suivis sur les
+blocs 72664→72666 et difficulté de part ajustée par le pool de 60 à 90, 112 puis 85 sans
+reconnexion du client. Le cycle de dev tax passe aussi par le pool : resommission du `login`
+côté frais, puis retour côté utilisateur.
 
 ### Pool Mining — Vipor (France)
 
@@ -199,7 +213,7 @@ Définit un nom de worker personnalisé pour identifier votre rig sur le pool.
 | Option | Description | Défaut |
 |--------|-------------|--------|
 | `--daemon <URL>` | URL du daemon/nœud pour le solo mining : WebSocket (`ws://`/`wss://`) pour Xelis, API HTTP du core pour Blocknet, RPC HTTP de `firod` pour Firo | **Requis (solo)** |
-| `--pool <URL>` | URL Stratum du pool pour le pool mining | **Requis (pool)** |
+| `--pool <URL>` | URL du pool pour le pool mining : Stratum pour Xelis/DragonX/Parano1d/Firo, lignes JSON du protocole `seine` pour Blocknet | **Requis (pool)** |
 | `--address <ADDR>` | Adresse wallet du coin miné, pour recevoir les récompenses | **Obligatoire** |
 | `--coin <NOM>` | Coin à miner : `xelis`, `dragonx`, `parano1d`, `blocknet`, `firo` | déduit de l'adresse |
 | `--worker <NAME>` | Nom du worker visible sur le pool | `worker1` |
@@ -312,6 +326,34 @@ Stratum Parano1d parle TLS (rustls) et accepte `stratum+ssl://`, `stratum+tls://
 pour ce pool. Le minage solo Parano1d n'est pas implémenté (pas de client RPC vers un
 nœud), et le moteur Poseidon2b est CPU uniquement — les options `--gpu` sont ignorées.
 
+Le moteur CPU pré-absorbe le préfixe du patron : les cinq blocs qui précèdent le nonce
+atteignent le même état d'éponge pour tous les candidats, donc un candidat ne coûte plus
+que **3 permutations au lieu de 8**. `cargo run --release --bin noid_bench` mesure le gain
+sur le gabarit `mining.notify` réel (même machine, mêmes plages de nonces) :
+**154 → 407 KH/s à 1 thread** et **1,11 → 2,90 MH/s à 16 threads**, soit ×2,6 à tous les
+compteurs de threads, et le checksum des digests reste identique à celui du noyau
+d'origine — la vitesse ne vient pas d'un hash différent. Contre-preuves : les quatre tests
+de `src/noid/batch.rs` comparent octet à octet les 256 nonces d'un lot au chemin packé
+d'origine et au chemin scalaire de consensus.
+
+Preuve live sur `eu2.innovlab.cc:19601` (TLS, 16 threads, 704 s, 7 novembre 2026) :
+**59 parts acceptées, aucune rejetée par le pool**, 23 jobs suivis de la hauteur 287 886
+à 287 908, hashrate affiché 2,70-3,02 MH/s aux fenêtres de 10 s et cycles
+« canonical-tip-unverified » repris sans reconnexion. Le compteur « Rejected » de la
+session vaut 1 : une part résolue sur un job supersédé pendant les 200 ms de la pause a
+été écartée par le client avant l'envoi, ce qui est le comportement attendu. Le binaire
+Linux statique (`HashPulse-linux-x86_64`, sha256 `9632dc3f4e4d…`) rend la même chose :
+2,99-3,14 MH/s à 16 threads, 8 parts acceptées et 0 rejetée en 160 s
+(`proofs/noid-linux-live.log`).
+
+Le GPU n'accélère pas ce coin, et ce n'est pas un choix de confort : le mineur de
+référence `noid-gpu-amd` ne publie que des binaires, et l'arborescence Apache-2.0 du dépôt
+Parano1d (1616 entrées, branche `main`, vérifiée le 2026-11-07 — `proofs/noid-tree.json`)
+ne contient aucun chemin `.cl` / `gpu` / `opencl`. Le kernel dont ils sortent n'a donc ni
+source ni licence, et il ne peut pas entrer dans HashPulse. Seule la technique est
+reprise, ré-implémentée en Rust dans `src/noid/batch.rs` au-dessus de l'API publique des
+crates vendorisés, qui restent byte-identiques à l'import.
+
 ### Firo (FiroPoW)
 
 | Pool | Usage | URL Stratum |
@@ -359,31 +401,49 @@ refusée avec la raison exacte plutôt que par le pool.
 
 ### Blocknet (Argon2id)
 
-Aucun pool Stratum n'existe pour Blocknet : le minage passe par l'API HTTP du core, donc
-`--pool` est refusé pour ce coin. Le core n'ouvre aucune API sans qu'on le lui demande :
-c'est `-api <adresse>` (ex. `127.0.0.1:8332`) qui l'allume, et `--daemon` doit reprendre
-exactement cette adresse.
+Blocknet se mine en pool ou en solo. En pool, HashPulse parle le protocole JSON-lines du
+mineur officiel `seine` : `--pool` est attendu ici, pas une adresse de daemon. En solo, le
+minage passe par l'API HTTP du core, que le core n'ouvre que si on le lui demande : c'est
+`-api <adresse>` (ex. `127.0.0.1:8332`) qui l'allume, et `--daemon` doit reprendre exactement
+cette adresse.
 
 ```powershell
+HashPulse.exe --coin blocknet --pool stratum+tcp://bntpool.com:3333 --address VOTRE_ADRESSE_BLOCKNET --worker rig_01
 HashPulse.exe --coin blocknet --daemon http://127.0.0.1:8332 --address VOTRE_ADRESSE_BLOCKNET
 ```
 
 Prérequis et réglages mesurés :
 
-- **Un core Blocknet à jour, démarré avec son API** : `-api 127.0.0.1:8332`. Sans ce
+- **Un core Blocknet à jour, démarré avec son API** (solo) : `-api 127.0.0.1:8332`. Sans ce
   drapeau le core ne sert aucune route de minage et n'écrit pas de jeton. Le jeton est
   écrit sous `<répertoire du nœud>/api.cookie` (`./blocknet-data-mainnet` par défaut,
   0600, supprimé à l'arrêt) et HashPulse le lit tout seul ; `--api-token` ou
   `--api-cookie` le donnent sinon.
+- **Le wallet Blocknet pour Windows se suffit à lui-même** : il démarre son propre core
+  avec `--api 127.0.0.1:18432` et écrit son jeton dans
+  `%APPDATA%\com.blocknet.wallet\data\api.cookie`, sans sous-répertoire de réseau.
+  HashPulse sonde `BNT_CONFIG_DIR`, `~/.config/bnt` et ce répertoire, avec et sans
+  sous-répertoire `mainnet` / `testnet` : `--daemon http://127.0.0.1:18432` suffit alors.
 - **Ne pas lancer le minage interne du core en même temps** (`POST /api/mining/start`) :
   chaque thread Argon2id, où qu'il soit, réserve 2 GiB.
 - **2 GiB de RAM par thread.** Argon2id est un PoW à mémoire : la dureté est l'arena,
   pas le temps CPU. Sans `--threads`, HashPulse choisit un thread et n'en ajoute que si
   la RAM libre physique le permet (il garde 1 GiB de marge pour le système).
 - **Débit attendu : ~0,8 H/s par thread**, soit ~1,25 s par hash. À la difficulté
-  actuelle du mainnet (≈ 23 M, réseau à ≈ 100 kH/s), un thread seul part sur une
-  dizaine de mois avant un bloc : ce coin se mine en solo uniquement si l'on veut
-  soutenir le réseau ou si l'on groupe plusieurs machines.
+  actuelle du mainnet (≈ 23 M, réseau à ≈ 100 kH/s), un thread seul en solo part sur une
+  dizaine de mois avant un bloc : ce mode ne se choisit que pour soutenir le réseau ou si
+  l'on groupe plusieurs machines.
+- **En pool, le même thread est payé en minutes.** `bntpool.com:3333` attribue une
+  difficulté de part de 60 (et l'ajuste seul, observé jusqu'à 112) : sur 700 s avec un seul
+  thread, **4 parts acceptées, 0 rejetée, la première 23 s après le login**, 11 jobs suivis
+  sur les blocs 72664→72666. Le protocole est celui du mineur officiel `seine` (BSD-3) :
+  une ligne JSON par message, `login` avec les capacités, `job` avec `header_base`, `target`
+  et la plage de nonces, `submit` avec le `claimed_hash`, `refill` quand la plage est
+  épuisée, keepalive `\n` après 10 s d'inactivité.
+- **Au-delà de la hauteur 103 680**, le PoW de Blocknet devient du BLAKE2b-512 et le source
+  amont marque ces paramètres non définitifs : HashPulse refuse l'ouvrage (solo comme pool)
+  et ne déclare pas `pow_blake2b_v1` au login, donc un pool qui bascule lui demande une mise
+  à jour au lieu de voir empiler des parts rejetées.
 - Les options `--gpu` sont ignorées : l'arena de 2 GiB ne tient pas dans une carte, et
   le gain d'Argon2id vient justement de la mémoire système.
 
@@ -412,9 +472,12 @@ Définit la dev tax à 2 %. Le minimum est 0.5 % et le maximum 5 %.
 Le wallet payé dépend du coin miné : l'adresse réellement utilisée est affichée au
 démarrage (`Dev Fee: 1.0% -> ...`). En solo Blocknet, le core reçoit un `blocktemplate`
 dont le coinbase pointe vers ce wallet pendant les quelques secondes de la phase
-développeur, puis revient à votre adresse. Un wallet mainnet est vérifié à la
-construction : une adresse testnet ou une faute de frappe est refusée avant le premier
-bloc perdu.
+développeur, puis revient à votre adresse. En pool Blocknet, la bascule renvoie un `login`
+portant ce wallet, puis un `login` portant le vôtre au retour : mesuré sur bntpool.com,
+`Switching to dev mining` à 02:23:53 et `Switching back to user mining` à 02:24:06, la
+session et le compteur de parts survivant aux deux reconnexions (heures UTC). Un wallet mainnet est
+vérifié à la construction : une adresse testnet ou une faute de frappe est refusée avant le
+premier bloc perdu.
 
 ---
 
