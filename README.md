@@ -30,6 +30,7 @@ intégré, HashPulse refuse de démarrer au lieu de soumettre des parts invalide
 5. [Dev Tax](#5-dev-tax-taxe-de-développement)
 6. [Configuration d'environnement](#6-configuration-denvironnement)
 7. [Guide GPU OpenCL](#7-guide-gpu-opencl)
+8. [Fonctionnement sous Linux](#8-fonctionnement-sous-linux)
 
 ---
 
@@ -580,6 +581,107 @@ HashPulse.exe --pool stratum+tcp://fr.vipor.net:5077 --address xel:VOTRE_ADRESSE
 ```
 
 Au démarrage, HashPulse détecte et liste tous les GPU OpenCL disponibles avec leur VRAM.
+
+---
+
+## 8. Fonctionnement sous Linux
+
+### Les deux binaires, tels qu'ils sont sur le disque
+
+| Binaire | Identité | `file` | `ldd` | `grep -ac OpenCL` |
+|---|---|---|---|---|
+| `HashPulse-linux-x86_64` | 4 576 216 o, sha256 `2b3960777809…` | ELF 64-bit LSB executable, **statically linked**, stripped | `not a dynamic executable` | 0 |
+| `HashPulse-linux-x86_64-gpu` | 5 008 704 o, sha256 `1c88816d023e…` | ELF 64-bit LSB **pie** executable, dynamically linked, interpreter `/lib64/ld-linux-x86-64.so.2`, for GNU/Linux 2.0.0 | `libOpenCL.so.1`, `libm.so.6`, `libc.so.6`, `libpthread.so.0`, `libdl.so.2` | 16 |
+
+Ces relevés sont pris sur les octets livrés, dans WSL2 Ubuntu avec le noyau
+`6.6.87.2-microsoft-standard-WSL2` (`proofs/linux-runtime-facts.log`). Le comptage
+`grep -ac OpenCL` est le contrôle rapide qui répond à la question « la feature GPU est-elle
+bien dans cet artifact-là ? » : 0 dans le statique, 16 dans le dynamique. Les chemins
+`proofs/…` cités dans cette section sont les journaux de mesure du dépôt de développement ;
+ils ne font pas partie de l'archive livrée.
+
+### Lequel prendre
+
+Le binaire CPU est lié à musl et ne dépend d'aucun paquet : il se lance tel quel sur Ubuntu,
+Debian, Arch, Fedora, CentOS/RHEL — et c'est aussi le seul des deux qu'Alpine (musl) et NixOS
+(pas de `/lib64/ld-linux-x86-64.so.2`) peuvent exécuter, deux exclusions écrites dans le script
+de build. Le binaire GPU est lié dynamiquement contre glibc 2.17 (CentOS 7, Ubuntu 14.04,
+Debian 8 et tout ce qui est plus récent) et réclame une `libOpenCL.so.1` présente sur le système :
+
+```bash
+sudo apt install libopencl1        # ou ocl-icd-libopencl1, selon les versions
+sudo pacman -S opencl-icd-loader
+sudo dnf install ocl-icd
+```
+
+Le paquet n'apporte que le chargeur ; la plateforme OpenCL elle-même vient du driver du
+constructeur (NVIDIA, AMD, Intel). La raison pour laquelle le GPU n'est pas non plus statique
+est écrite dans l'en-tête de `xelis-miner/build_linux.sh` : une libc musl statique n'a pas de
+`dlopen()` exploitable, donc ne peut pas charger l'ICD du constructeur au runtime.
+
+### Premier lancement
+
+```bash
+chmod +x HashPulse-linux-x86_64
+./HashPulse-linux-x86_64 --pool stratum+tcp://fr.vipor.net:5077 --address xel:VOTRE_ADRESSE --threads 8
+```
+
+Les options sont exactement les mêmes que sous Windows (`--help` se lit dans le terminal, voir
+section 3), y compris `--user-agent "rigel/1.4.5"` pour GrandPool, dont la liste blanche
+s'applique aussi à Linux. Les journaux sortent en INFO par défaut ; `RUST_LOG=warn` pour ne
+garder que l'essentiel, `RUST_LOG=debug` pour les trames Stratum.
+
+Le Ctrl+C est un SIGINT géré : le mineur écrit `Received Ctrl+C, shutting down...`, boucle
+proprement les threads et rend la main. C'est ce que font les harnais de preuve avec
+`timeout -s INT 305 ./HashPulse-linux-x86_64 …` (`proofs/linux-dragonx-v2-16t.log:237`).
+
+### Ce que font les deux binaires face à l'option `--gpu` (mesuré)
+
+- `--gpu` sur le binaire statique : `GPU mining requested but not compiled with GPU support!`,
+  puis `Recompile with: cargo build --release --features gpu`, et le CPU hache quand même
+  (`proofs/linux-cpu-binary-gpuflag.log`).
+- `--gpu` sur le binaire GPU quand l'ICD ne voit aucune carte — le cas de cette machine WSL2 :
+  `Detecting OpenCL devices...` → `No OpenCL GPU devices detected` → `No GPUs detected.
+  Continuing with CPU only.` et le minage démarre en CPU (`proofs/linux-gpu-probe.log`). Le
+  troisième avertissement de cette séquence renvoie à `INSTALL_OPENCL.md` : le fichier est
+  dans les sources (`xelis-miner/INSTALL_OPENCL.md`, avec un paragraphe Linux et `clinfo`
+  pour vérifier la carte) mais n'est pas dans l'archive livrée, où le présent paragraphe
+  fait office d'installation.
+
+Une carte réellement visible par OpenCL sous Linux n'a pas été testée ici : le kernel GPU est
+mesuré sur Windows (`proofs/gpu-live-*.log`), et `1c88816d023e` n'a jamais été lancé contre un
+GPU (`proofs/linux-recert-2026-11-07.md` se termine sur cette lacune).
+
+### Ce qui a été relancé sur ces octets
+
+| Moteur | Pool | Réglage | Débit | Parts |
+|---|---|---|---|---|
+| Parano1d | `eu2.innovlab.cc:19601` (TLS) | 16 threads, 160 s | 2,43–2,76 MH/s | 4 acceptées, 0 rejetée (`proofs/noid-linux-live-v2.log`) |
+| DragonX | `pool.dragonx.is:3433` | 16 threads, 305 s | 147–159 H/s | 7 acceptées, 0 rejetée (`proofs/linux-dragonx-v2-16t.log`) |
+| DragonX | `pool.dragonx.is:3433` | 6 threads, 305 s | 85 H/s | 19 acceptées, 0 rejetée (`proofs/linux-dragonx-v2.log`) |
+| Blocknet | `bntpool.com:3333` | 1 thread (auto, RAM), 480 s | 0,30–0,40 H/s | 3 acceptées, 0 rejetée (`proofs/linux-blocknet-v2.log`) |
+
+Deux réservations, consignées plutôt que gommées. Les sept parts DragonX à 16 threads sont
+tombées sur les 45 dernières secondes, après 244 s sans part à débit plein, sans erreur ni
+`Duplicate share` dans le journal : allure du pool non élucidée. Pour Blocknet, deux tentatives
+plus courtes sur le même binaire n'avaient donné aucune part (120 s, puis 260 s avec un
+`Discarding nonce … found for an older job`), et la difficulté de part est montée de 60 à 112
+sans reconnexion — compter « une part en 75 s » sur ce moteur était un tirage chanceux, pas
+une propriété du binaire : à 0,40 H/s et difficulté 60, le pool lui-même annonçait « 2 minutes »,
+puis 3, puis 4 à mesure que la difficulté montait.
+
+### Régénérer les deux binaires
+
+```bash
+cd xelis-miner && bash build_linux.sh
+```
+
+Dépendances d'une seule traite (bloc d'en-tête du script) : `build-essential` et
+`pkg-config`, les targets rustup `x86_64-unknown-linux-musl` et `x86_64-unknown-linux-gnu`,
+zig 0.16.0 et `cargo-zigbuild`. Zig est obligatoire, pas décoratif : RandomX est du C++ et il
+n'existe pas de g++ musl, donc `zig c++` est le seul driver à porter les en-têtes C++ et une
+libc++ pour musl. La build est reproductible à l'octet près : deux exécutions successives ont
+redonné `2b3960777809…` et `1c88816d023e…`.
 
 ---
 
