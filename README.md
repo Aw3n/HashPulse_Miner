@@ -343,8 +343,8 @@ Preuve live sur `eu2.innovlab.cc:19601` (TLS, 16 threads, 704 s, 7 novembre 2026
 session vaut 1 : une part résolue sur un job supersédé pendant les 200 ms de la pause a
 été écartée par le client avant l'envoi, ce qui est le comportement attendu. Le binaire
 Linux statique (`HashPulse-linux-x86_64`, sha256 `9632dc3f4e4d…`) rend la même chose :
-2,99-3,14 MH/s à 16 threads, 8 parts acceptées et 0 rejetée en 160 s
-(`proofs/noid-linux-live.log`).
+2,90-3,14 MH/s à 16 threads après une première fenêtre à 1,95 MH/s, 8 parts acceptées et
+0 rejetée en 160 s (`proofs/noid-linux-live.log`).
 
 Le GPU n'accélère pas ce coin, et ce n'est pas un choix de confort : le mineur de
 référence `noid-gpu-amd` ne publie que des binaires, et l'arborescence Apache-2.0 du dépôt
