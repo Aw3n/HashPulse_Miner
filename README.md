@@ -347,14 +347,17 @@ de `src/noid/batch.rs` comparent octet à octet les 256 nonces d'un lot au chemi
 d'origine et au chemin scalaire de consensus.
 
 Preuve live sur `eu2.innovlab.cc:19601` (TLS, 16 threads, 704 s, 7 novembre 2026 à 04:15,
-sur la build `7bd2588f5c8f…` de 5 215 232 octets, antérieure aux octets livrés ce soir) :
+sur la build `7bd2588f5c8f…` de 5 215 232 octets, antérieure aux octets actuellement livrés) :
 **59 parts acceptées, aucune rejetée par le pool**, 23 jobs suivis de
 la hauteur 287 886 à 287 908, hashrate affiché 2,70-3,02 MH/s aux fenêtres de 10 s et cycles
 « canonical-tip-unverified » repris sans reconnexion. Le compteur « Rejected » de la
 session vaut 1 : une part résolue sur un job supersédé pendant les 200 ms de la pause a
 été écartée par le client avant l'envoi, ce qui est le comportement attendu.
 
-Les deux mesures qui suivent sont jouées sur les octets livrés ce soir.
+Les deux mesures qui suivent sont jouées sur la build livrée le 7 novembre (`39db1d0ca147…`
+sous Windows, `8e7f300e5d82…` sous Linux). La build livrée le 8 novembre (`bd3bff687a27…`,
+`1a1366cc8d6f…`, `b8102e399bd5…`) n'a pas été relancée contre ces pools : ce qu'elle a
+effectivement rejoué est listé en section 5.
 
 Windows — `HashPulse.exe`, 5 237 248 octets, sha256 `39db1d0ca147…`, 2 threads :
 `noid.suprnova.cc:3337` en TCP nu donne 7 ouvrages sur les hauteurs 289 986 à 289 991 (dont une
@@ -494,8 +497,12 @@ Définit la dev tax à 2 %. Le minimum est 0.5 % et le maximum 5 %.
 
 ### Adresse payée par la taxe
 
-Le wallet payé dépend du coin miné : l'adresse réellement utilisée est affichée au
-démarrage (`Dev Fee: 1.0% -> ...`). En solo Blocknet, le core reçoit un `blocktemplate`
+Le wallet payé dépend du coin miné, mais la console ne l'affiche pas. Le démarrage annonce le
+pourcentage (`Dev Fee: 1.0%`, puis `💰 Dev tax enabled: 1.0% of Xelis` et le cycle
+`594s user → 6s dev (every 600s)`), et toute ligne de log qui aurait porté ce wallet — écho
+d'autorisation, `submit_id`, paramètres d'un `mining.authorize` — affiche `<dev fee wallet>` à
+sa place. Le wallet ne quitte donc que le fil protocolaire, là où le pool doit savoir à qui
+payer. En solo Blocknet, le core reçoit un `blocktemplate`
 dont le coinbase pointe vers ce wallet pendant les quelques secondes de la phase
 développeur, puis revient à votre adresse. En pool Blocknet, la bascule renvoie un `login`
 portant ce wallet, puis un `login` portant le vôtre au retour : mesuré sur bntpool.com,
@@ -503,6 +510,33 @@ portant ce wallet, puis un `login` portant le vôtre au retour : mesuré sur bnt
 session et le compteur de parts survivant aux deux reconnexions (heures UTC). Un wallet mainnet est
 vérifié à la construction : une adresse testnet ou une faute de frappe est refusée avant le
 premier bloc perdu.
+
+### Ce que la build du 8 novembre a rejoué
+
+Les octets actuellement livrés — `HashPulse.exe` `bd3bff687a27…` (5 243 904 o),
+`HashPulse-linux-x86_64` `1a1366cc8d6f…` (4 584 824 o), `HashPulse-linux-x86_64-gpu`
+`b8102e399bd5…` (5 021 984 o) — n'ont été relancés que sur ce que le changement touchait :
+
+- **fenêtre de frais en direct**, 620 s sur Windows contre un substitut local de pool
+  (`proofs/fee-window-mask.ps1`, frames Vipor rejoués depuis
+  `proofs/stratum-raw-probe-alternates.log`) : bascule à 17:39:13Z, la console lit
+  `Sent mining.authorize: ["<dev fee wallet>","rig_mask","x"]`, le fil protocolaire lit le
+  wallet réel (`proofs/fee-window-pool.log`), retour à l'adresse de l'utilisateur à 17:39:43Z,
+  une part soumise pendant la fenêtre, 5 parts acceptées et 0 rejetées sur la session ;
+- **`--help` des trois plateformes** (`proofs/help-nofee.txt`, `proofs/help-linux-nofee.txt`,
+  6 948 o chacun) : 0 occurrence des cinq wallets, quand le `--help` des octets du 7 novembre en
+  donnait 5 (`proofs/help-previous-bytes.txt`, contrôle positif) ;
+- **suite complète** `cargo test --lib --features gpu` : 196 passed, 0 failed, 3 ignored en
+  735,71 s (`proofs/test-suite-nofee.log`).
+
+Lacune assumée : les mesures de débit et de parts des sections 3 et 4 (GPU Vipor, pools
+DragonX, Parano1d, Blocknet, Firo) restent attachées aux octets du 7 novembre sur lesquels elles
+ont été jouées. Les octets de ce soir touchent cinq fichiers — `src/dev_tax.rs`,
+`src/bin/cli_miner.rs`, `src/blocknet/mod.rs`, `src/blocknet/pool.rs`, `src/firo/mod.rs` — dont
+aucun moteur de hash ni aucun envoi protocolaire : les quatre lignes touchées dans les moteurs
+Blocknet et Firo sont des `info!`, et le wallet part toujours par le socket ; les mesures live
+n'ont pourtant pas été relancées. Détail complet,
+contre-preuves par mutation et relevés dans `proofs/fee-window-mask.md`.
 
 ---
 
@@ -611,10 +645,11 @@ Au démarrage, HashPulse détecte et liste tous les GPU OpenCL disponibles avec 
 
 | Binaire | Identité | `file` | `ldd` | `grep -ac OpenCL` |
 |---|---|---|---|---|
-| `HashPulse-linux-x86_64` | 4 579 048 o, sha256 `8e7f300e5d82…` | ELF 64-bit LSB executable, **statically linked**, stripped | `not a dynamic executable` | 0 |
-| `HashPulse-linux-x86_64-gpu` | 5 015 632 o, sha256 `d0aa02e60a47…` | ELF 64-bit LSB **pie** executable, dynamically linked, interpreter `/lib64/ld-linux-x86-64.so.2`, for GNU/Linux 2.0.0 | `libOpenCL.so.1`, `libm.so.6`, `libc.so.6`, `libpthread.so.0`, `libdl.so.2` | 16 |
+| `HashPulse-linux-x86_64` | 4 584 824 o, sha256 `1a1366cc8d6f…` | ELF 64-bit LSB executable, **statically linked**, stripped | `not a dynamic executable` | 0 |
+| `HashPulse-linux-x86_64-gpu` | 5 021 984 o, sha256 `b8102e399bd5…` | ELF 64-bit LSB **pie** executable, dynamically linked, interpreter `/lib64/ld-linux-x86-64.so.2`, for GNU/Linux 2.0.0 | `libOpenCL.so.1`, `libm.so.6`, `libc.so.6`, `libpthread.so.0`, `libdl.so.2` | 16 |
 
-Ces relevés sont pris sur les octets livrés, dans WSL2 Ubuntu avec le noyau
+Ces relevés sont pris sur les octets livrés — `proofs/linux-recheck-v4.log`, 8 novembre 2026 —
+dans WSL2 Ubuntu avec le noyau
 `6.6.87.2-microsoft-standard-WSL2` (`proofs/linux-runtime-facts.log`). Le comptage
 `grep -ac OpenCL` est le contrôle rapide qui répond à la question « la feature GPU est-elle
 bien dans cet artifact-là ? » : 0 dans le statique, 16 dans le dynamique. Les chemins
@@ -670,17 +705,22 @@ proprement les threads et rend la main. C'est ce que font les harnais de preuve 
   fait office d'installation.
 
 Une carte réellement visible par OpenCL sous Linux n'a pas été testée ici : le kernel GPU est
-mesuré sur Windows (`proofs/gpu-live-*.log`), et `d0aa02e60a47…` — comme `1c88816d023e…` avant
-lui — n'a jamais été lancé contre un GPU : WSL Ubuntu-24.04 n'expose aucun ICD OpenCL sur cette
+mesuré sur Windows (`proofs/gpu-live-*.log`), et `b8102e399bd5…` — comme `d0aa02e60a47…` et
+`1c88816d023e…` avant lui — n'a jamais été lancé contre un GPU : WSL Ubuntu-24.04 n'expose aucun
+ICD OpenCL sur cette
 machine (`proofs/linux-recert-2026-11-07.md` se termine sur cette lacune).
 
 ### Ce qui a été relancé, et sur quels octets
 
-Les deux lignes Parano1d sont jouées sur les octets livrés (build du 7 novembre 21:52, sha256
-`8e7f300e5d82…`). Les lignes DragonX et Blocknet ont été jouées sur la build précédente du même
-binaire (4 576 216 octets, sha256 `2b3960777809…`) et n'ont pas été rejouées depuis : depuis la
-build de 16:04, aucun fichier de `src/drgx/` ni de `src/blocknet/` n'a été touché et le registre
-partagé `coin.rs` n'a changé que dans la liste des pools Parano1d.
+Les deux lignes Parano1d sont jouées sur la build du 7 novembre 21:52, sha256
+`8e7f300e5d82…`. Les lignes DragonX et Blocknet ont été jouées sur la build précédente du même
+binaire (4 576 216 octets, sha256 `2b3960777809…`) et n'ont pas été rejouées depuis. La build du
+8 novembre (`1a1366cc8d6f…`) n'a touché que l'affichage : deux lignes de log dans
+`src/blocknet/mod.rs` et `src/blocknet/pool.rs`, plus le masque appliqué à toute ligne de log
+à la sortie du logger (`src/dev_tax.rs`, `src/bin/cli_miner.rs`) ; `src/drgx/` et le moteur
+Argon2id de Blocknet sont inchangés octet pour octet, et aucune session live Blocknet ou
+DragonX n'a été relancée sur ces octets — la fenêtre de frais ayant, elle, été rejouée sur
+`HashPulse.exe` (section 5).
 
 | Moteur | Pool | Réglage | Débit | Parts |
 |---|---|---|---|---|
