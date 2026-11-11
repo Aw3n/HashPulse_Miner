@@ -45,10 +45,6 @@ intégré, HashPulse refuse de démarrer au lieu de soumettre des parts invalide
 | **Support GPU** | OpenCL inclus dans le binaire |
 | **Nom (Linux)** | `HashPulse-linux-x86_64` (CPU, statique musl) et `HashPulse-linux-x86_64-gpu` (CPU+GPU, glibc ≥ 2.17) |
 
-Les deux binaires Linux sont régénérés par `xelis-miner/build_linux.sh` depuis WSL ou
-n'importe quel hôte Linux ; le binaire CPU est entièrement statique et tourne aussi sur
-Alpine et NixOS, le binaire GPU a besoin d'une `libOpenCL.so.1` fournie par le driver.
-
 ---
 
 ## 2. Commandes de démarrage rapide
@@ -120,14 +116,6 @@ petites rigs, `:3434` au-delà de 10 kH/s. RandomX rend ~10 H/s par thread, et l
 ```powershell
 HashPulse.exe --coin blocknet --pool stratum+tcp://bntpool.com:3333 --address VOTRE_ADRESSE_BLOCKNET --worker rig_01
 ```
-
-Le protocole n'est pas Stratum : ce sont les lignes JSON du mineur officiel `seine`
-(`login` avec capacités, `job` avec `header_base`, `target` et une plage de nonces, `submit`
-avec le `claimed_hash`, `refill` en fin de plage). Mesuré sur 700 s avec un seul thread :
-**4 parts acceptées, 0 rejetée, première part 23 s après le login**, 11 jobs suivis sur les
-blocs 72664→72666 et difficulté de part ajustée par le pool de 60 à 90, 112 puis 85 sans
-reconnexion du client. Le cycle de dev tax passe aussi par le pool : resommission du `login`
-côté frais, puis retour côté utilisateur.
 
 ### Pool Mining — Vipor (France)
 
@@ -480,11 +468,7 @@ proprement les threads et rend la main. C'est ce que font les harnais de preuve 
   (`proofs/linux-cpu-binary-gpuflag.log`).
 - `--gpu` sur le binaire GPU quand l'ICD ne voit aucune carte — le cas de cette machine WSL2 :
   `Detecting OpenCL devices...` → `No OpenCL GPU devices detected` → `No GPUs detected.
-  Continuing with CPU only.` et le minage démarre en CPU (`proofs/linux-gpu-probe.log`). Le
-  troisième avertissement de cette séquence renvoie à `INSTALL_OPENCL.md` : le fichier est
-  dans les sources (`xelis-miner/INSTALL_OPENCL.md`, avec un paragraphe Linux et `clinfo`
-  pour vérifier la carte) mais n'est pas dans l'archive livrée, où le présent paragraphe
-  fait office d'installation.
+  Continuing with CPU only.` et le minage démarre en CPU (`proofs/linux-gpu-probe.log`).
 
 ---
 
