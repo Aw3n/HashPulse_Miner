@@ -498,36 +498,6 @@ La courbe monte encore à 2944, qui est le maximum tenant dans une seule allocat
 moins un work-group au lieu de l'ancien 2560. Une carte plus petite est bornée par son propre
 plafond ; `--gpu-intensity` reste l'option pour imposer une valeur.
 
-### Ce que mesure le noyau (A/B compilateur, GTX 1060 6 Go, 2560 work-items)
-
-`xelis_gpu_ab` compile le kernel livré plusieurs fois — une par jeu d'options OpenCL — et les
-intercale sur les mêmes buffers ; chaque variante est d'abord contrôlée contre le moteur CPU
-`xelis-hash` v3, donc un gain ne peut pas venir d'un digest différent. Les débits absolus
-dépendent de l'horloge GPU au moment de la mesure : les dix rounds des cinq sessions du
-7 novembre 2026 sont donc donnés ensemble, et seuls les rapports sont reproductibles.
-
-| Variante | Débit | Rapport à la référence, d'un round à l'autre |
-|----------|-------|----------------------------------------|
-| divisions 128 bits bit-serial (l'ancien kernel) — référence | 598–674 H/s | ×1 |
-| divisions 128 bits par limbs (Knuth D) — **kernel livré** | 927–1053 H/s | **×1,54–1,59** (moyenne des 8 paires : ×1,57) |
-| divisions retirées (sonde de plafond, ne hache pas) | 1625–1791 H/s | ×2,63–2,77 (moyenne des 8 paires : ×2,70) |
-
-Sur les six rounds où les trois variantes ont été jouées côte à côte, le kernel livré supprime
-56–59 % du temps que la sonde attribue aux divisions larges — calcul en temps par hachure
-(1 / débit) à partir des trois débits, pas une mesure directe. Le reste n'est pas décomposé : la
-piste suivante identifiée — les cinq divisions 64 bits que compte chaque appel 128/64 dans le
-noyau, qu'un inverse de diviseur précalculé transformerait en multiplications — n'a pas encore
-été mesurée sur cette carte.
-
-```powershell
-cargo run --release --features gpu --bin div_gate
-```
-
-`div_gate` est la porte d'exactitude de ces divisions : deux variantes vertes comparées au
-`u128` Rust sur 8 000 000 de valeurs, cinq mutations plantées qui doivent rougir, et deux
-branches tenues pour inatteignables dont la suppression doit rester équivalente — la claim
-« code mort » est ainsi jouée, pas assertée.
-
 ### Tester la détection GPU
 
 ```powershell
