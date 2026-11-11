@@ -204,7 +204,7 @@ Définit un nom de worker personnalisé pour identifier votre rig sur le pool.
 | Option | Description | Défaut |
 |--------|-------------|--------|
 | `--daemon <URL>` | URL du daemon/nœud pour le solo mining : WebSocket (`ws://`/`wss://`) pour Xelis, API HTTP du core pour Blocknet, RPC HTTP de `firod` pour Firo | **Requis (solo)** |
-| `--pool <URL>` | URL du pool pour le pool mining : Stratum pour Xelis/DragonX/Parano1d/Firo, lignes JSON du protocole `seine` pour Blocknet | **Requis (pool)** |
+| `--pool <URL>` | URL du pool pour le pool mining : Stratum pour Xelis/DragonX/Parano1d/Firo, lignes JSON pour Blocknet | **Requis (pool)** |
 | `--address <ADDR>` | Adresse wallet du coin miné, pour recevoir les récompenses | **Obligatoire** |
 | `--coin <NOM>` | Coin à miner : `xelis`, `dragonx`, `parano1d`, `blocknet`, `firo` | déduit de l'adresse |
 | `--worker <NAME>` | Nom du worker visible sur le pool | `worker1` |
@@ -253,15 +253,7 @@ Définit un nom de worker personnalisé pour identifier votre rig sur le pool.
 
 ### DragonX (RandomX, configuration Hush)
 
-Le réseau DragonX se mine en CPU (RandomX est volontairement réfractaire aux GPU) : les
-options `--gpu` sont ignorées et le moteur utilise les paramètres Hush — sel d'Argon2
-`RandomXHUSH\x03`, 5 itérations, programmes de 512 instructions, 4096 itérations et 16
-programmes par hash. Le moteur tourne en *light mode* : un cache d'époque de 256 MiB construit
-en quelques secondes et partagé par tous les threads, ~2 MiB de plus par thread, et aucun
-dataset de 1 Go à construire. Un changement de clé ne stoppe pas la
-recherche. Le format de job est celui des pools Zelcore/XMRig (`login`, `job`, `submit`,
-`target` 8 ou 4 octets en hexadécimal, `nonce` de 32 octets), et une part est jugée sur le
-double SHA-256 du header et du hash RandomX — pas sur le hash RandomX seul.
+Le réseau DragonX se mine en CPU (RandomX est volontairement réfractaire aux GPU).
 
 | Pool | Usage | URL Stratum |
 |------|-------|-------------|
@@ -427,8 +419,7 @@ proprement les threads et rend la main. C'est ce que font les harnais de preuve 
 ### Ce que font les deux binaires face à l'option `--gpu` (mesuré)
 
 - `--gpu` sur le binaire statique : `GPU mining requested but not compiled with GPU support!`,
-  puis `Recompile with: cargo build --release --features gpu`, et le CPU hache quand même
-  (`proofs/linux-cpu-binary-gpuflag.log`).
+  puis `Recompile with: cargo build --release --features gpu`, et le CPU hache quand même.
 - `--gpu` sur le binaire GPU quand l'ICD ne voit aucune carte — le cas de cette machine WSL2 :
   `Detecting OpenCL devices...` → `No OpenCL GPU devices detected` → `No GPUs detected.
   Continuing with CPU only.` et le minage démarre en CPU.
