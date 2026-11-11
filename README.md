@@ -285,35 +285,6 @@ double SHA-256 du header et du hash RandomX — pas sur le hash RandomX seul.
 Le minage solo DragonX n'est pas implémenté : un nœud DRGX ne fournit rien à interroger
 pour un mineur CPU, il faut passer par `--pool`.
 
-Réglages mesurés sur `pool.dragonx.is:3433` (Ryzen 7 5700X, 2026-11-06) :
-
-- **46-60 H/s à 4 threads, 140-165 H/s à 16** — RandomX se compte en hachures par
-  seconde, pas en kH/s : ~10 H/s par thread. La RAM n'est pas le facteur limitant :
-  266 MiB residents à 1 thread, 281 MiB à 8, le cache d'époque de 256 MiB étant partagé.
-- **16 parts acceptées, 0 rejetée en 671 s** à 4 threads (54 jobs suivis, 23 hauteurs,
-  première part 115 s après la connexion). Le pool a monté la difficulté de part de
-  1 072 à 2 145 puis 15 000 en cours de route, et à 3 750 lors du second essai
-  (16 threads, 260 s, 1 part acceptée / 0 rejetée) : le client s'adapte à chaque
-  `target` sans reconnexion, et c'est ce qui prouve que la cible lue est la bonne.
-- **Une digest de référence ancré** : le header de 140 octets `(0..140)` haché sous la
-  clé d'exemple donne `5607a326eb9337d519c400c577891ec43fab02997deda2e42baf8b41f74981c0`,
-  identique par le JIT, par l'interpréteur (`flags = 0`) et par la voie pipelinée
-  `hash_first`/`hash_next`/`hash_last`. Contre-preuve : passer `RANDOMX_JUMP_BITS`
-  de 8 à 7 — une macro que le build ne vérifie pas — fait rougir ce test, donc le
-  digest atteste bien des paramètres Hush et pas d'un chemin de repli.
-- **Un défaut relevé par la preuve live elle-même** : au troisième essai (4 threads,
-  301 s, 8 parts acceptées), le pool a répondu `Duplicate share` à une part déjà payée.
-  Le compteur de nonces repartait de l'indice du worker à chaque job, donc un simple
-  changement de `target` sur la même hauteur re-soumettait les nonces déjà comptés. Le
-  curseur est maintenant unique, partagé par tous les threads, et ne revient jamais en
-  arrière ; le test de non-régression rougit `[0, 1, 0, 1]` si on lui rend l'ancien
-  comportement. Re-épreuve sur le binaire corrigé : **20 parts acceptées, 0 rejetée en
-  641 s** à 4 threads (46 jobs, 18 hauteurs, 51-61 H/s, `target` passé de 1 000 à 7 500
-  en cours de hauteur), et aucun nonce soumis deux fois.
-- `--gpu` est ignoré (RandomX est CPU-only par construction), et rien ici ne vient du
-  code GPL d'XMRig : les cinq paramètres Hush sont portés dans l'arbre RandomX
-  BSD-3-Clause vendoré (`randomx-c/`), patché de 20 lignes dans un seul fichier.
-
 ### Parano1d (Poseidon2b)
 
 | Pool | Usage | URL Stratum |
