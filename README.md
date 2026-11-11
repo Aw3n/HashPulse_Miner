@@ -422,7 +422,7 @@ garder que l'essentiel, `RUST_LOG=debug` pour les trames Stratum.
 
 Le Ctrl+C est un SIGINT géré : le mineur écrit `Received Ctrl+C, shutting down...`, boucle
 proprement les threads et rend la main. C'est ce que font les harnais de preuve avec
-`timeout -s INT 305 ./HashPulse-linux-x86_64 …` (`proofs/linux-dragonx-v2-16t.log:237`).
+`timeout -s INT 305 ./HashPulse-linux-x86_64 …`.
 
 ### Ce que font les deux binaires face à l'option `--gpu` (mesuré)
 
@@ -431,7 +431,7 @@ proprement les threads et rend la main. C'est ce que font les harnais de preuve 
   (`proofs/linux-cpu-binary-gpuflag.log`).
 - `--gpu` sur le binaire GPU quand l'ICD ne voit aucune carte — le cas de cette machine WSL2 :
   `Detecting OpenCL devices...` → `No OpenCL GPU devices detected` → `No GPUs detected.
-  Continuing with CPU only.` et le minage démarre en CPU (`proofs/linux-gpu-probe.log`).
+  Continuing with CPU only.` et le minage démarre en CPU.
 
 ---
 
