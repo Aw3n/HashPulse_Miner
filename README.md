@@ -464,11 +464,6 @@ la courbe débit / occupation du kernel actuel :
 | 2560 | ~1048 H/s | +11 % |
 | 2944 | ~1077 H/s | +3 % (plafond d'allocation de la carte) |
 
-La courbe monte encore à 2944, qui est le maximum tenant dans une seule allocation
-(2944 × 531 KB = 1526 Mo sur les 1535 Mo autorisés) : le défaut `auto` vise donc ce plafond
-moins un work-group au lieu de l'ancien 2560. Une carte plus petite est bornée par son propre
-plafond ; `--gpu-intensity` reste l'option pour imposer une valeur.
-
 ### Tester la détection GPU
 
 ```powershell
@@ -487,14 +482,6 @@ Au démarrage, HashPulse détecte et liste tous les GPU OpenCL disponibles avec 
 |---|---|---|---|---|
 | `HashPulse-linux-x86_64` | 4 584 824 o, sha256 `1a1366cc8d6f…` | ELF 64-bit LSB executable, **statically linked**, stripped | `not a dynamic executable` | 0 |
 | `HashPulse-linux-x86_64-gpu` | 5 021 984 o, sha256 `b8102e399bd5…` | ELF 64-bit LSB **pie** executable, dynamically linked, interpreter `/lib64/ld-linux-x86-64.so.2`, for GNU/Linux 2.0.0 | `libOpenCL.so.1`, `libm.so.6`, `libc.so.6`, `libpthread.so.0`, `libdl.so.2` | 16 |
-
-Ces relevés sont pris sur les octets livrés — `proofs/linux-recheck-v4.log`, 8 novembre 2026 —
-dans WSL2 Ubuntu avec le noyau
-`6.6.87.2-microsoft-standard-WSL2` (`proofs/linux-runtime-facts.log`). Le comptage
-`grep -ac OpenCL` est le contrôle rapide qui répond à la question « la feature GPU est-elle
-bien dans cet artifact-là ? » : 0 dans le statique, 16 dans le dynamique. Les chemins
-`proofs/…` cités dans cette section sont les journaux de mesure du dépôt de développement ;
-ils ne font pas partie de l'archive livrée.
 
 ### Lequel prendre
 
@@ -543,33 +530,6 @@ proprement les threads et rend la main. C'est ce que font les harnais de preuve 
   dans les sources (`xelis-miner/INSTALL_OPENCL.md`, avec un paragraphe Linux et `clinfo`
   pour vérifier la carte) mais n'est pas dans l'archive livrée, où le présent paragraphe
   fait office d'installation.
-
-Une carte réellement visible par OpenCL sous Linux n'a pas été testée ici : le kernel GPU est
-mesuré sur Windows (`proofs/gpu-live-*.log`), et `b8102e399bd5…` — comme `d0aa02e60a47…` et
-`1c88816d023e…` avant lui — n'a jamais été lancé contre un GPU : WSL Ubuntu-24.04 n'expose aucun
-ICD OpenCL sur cette
-machine (`proofs/linux-recert-2026-11-07.md` se termine sur cette lacune).
-
-### Ce qui a été relancé, et sur quels octets
-
-Les deux lignes Parano1d sont jouées sur la build du 7 novembre 21:52, sha256
-`8e7f300e5d82…`. Les lignes DragonX et Blocknet ont été jouées sur la build précédente du même
-binaire (4 576 216 octets, sha256 `2b3960777809…`) et n'ont pas été rejouées depuis. La build du
-8 novembre (`1a1366cc8d6f…`) n'a touché que l'affichage : deux lignes de log dans
-`src/blocknet/mod.rs` et `src/blocknet/pool.rs`, plus le masque appliqué à toute ligne de log
-à la sortie du logger (`src/dev_tax.rs`, `src/bin/cli_miner.rs`) ; `src/drgx/` et le moteur
-Argon2id de Blocknet sont inchangés octet pour octet, et aucune session live Blocknet ou
-DragonX n'a été relancée sur ces octets — la fenêtre de frais ayant, elle, été rejouée sur
-`HashPulse.exe` 620 s contre un substitut local de pool, avec le wallet réel visible côté fil
-protocolaire et `<dev fee wallet>` côté console.
-
-| Moteur | Pool | Réglage | Débit | Parts |
-|---|---|---|---|---|
-| Parano1d | `eu2.innovlab.cc:19601` (TLS) | 16 threads, 160 s | 2,75–2,97 MH/s | 2 acceptées, 0 rejetée (`proofs/noid-linux-live-v3.log`) |
-| Parano1d | `noid.suprnova.cc:3337` (TCP nu) | 16 threads, 90 s | 2,78–2,90 MH/s | 8 acceptées, 0 rejetée (`proofs/noid-linux-live-v3.log`) |
-| DragonX | `pool.dragonx.is:3433` | 16 threads, 305 s | 147–159 H/s | 7 acceptées, 0 rejetée (`proofs/linux-dragonx-v2-16t.log`) |
-| DragonX | `pool.dragonx.is:3433` | 6 threads, 305 s | 85 H/s | 19 acceptées, 0 rejetée (`proofs/linux-dragonx-v2.log`) |
-| Blocknet | `bntpool.com:3333` | 1 thread (auto, RAM), 480 s | 0,30–0,40 H/s | 3 acceptées, 0 rejetée (`proofs/linux-blocknet-v2.log`) |
 
 ---
 
