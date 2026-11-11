@@ -437,49 +437,6 @@ HashPulse.exe --pool stratum+tcp://fr.vipor.net:5077 --address xel:VOTRE_ADRESSE
 
 Définit la dev tax à 2 %. Le minimum est 0.5 % et le maximum 5 %.
 
-### Adresse payée par la taxe
-
-Le wallet payé dépend du coin miné, mais la console ne l'affiche pas. Le démarrage annonce le
-pourcentage (`Dev Fee: 1.0%`, puis `💰 Dev tax enabled: 1.0% of Xelis` et le cycle
-`594s user → 6s dev (every 600s)`), et toute ligne de log qui aurait porté ce wallet — écho
-d'autorisation, `submit_id`, paramètres d'un `mining.authorize` — affiche `<dev fee wallet>` à
-sa place. Le wallet ne quitte donc que le fil protocolaire, là où le pool doit savoir à qui
-payer. En solo Blocknet, le core reçoit un `blocktemplate`
-dont le coinbase pointe vers ce wallet pendant les quelques secondes de la phase
-développeur, puis revient à votre adresse. En pool Blocknet, la bascule renvoie un `login`
-portant ce wallet, puis un `login` portant le vôtre au retour : mesuré sur bntpool.com,
-`Switching to dev mining` à 02:23:53 et `Switching back to user mining` à 02:24:06, la
-session et le compteur de parts survivant aux deux reconnexions (heures UTC). Un wallet mainnet est
-vérifié à la construction : une adresse testnet ou une faute de frappe est refusée avant le
-premier bloc perdu.
-
-### Ce que la build du 8 novembre a rejoué
-
-Les octets actuellement livrés — `HashPulse.exe` `bd3bff687a27…` (5 243 904 o),
-`HashPulse-linux-x86_64` `1a1366cc8d6f…` (4 584 824 o), `HashPulse-linux-x86_64-gpu`
-`b8102e399bd5…` (5 021 984 o) — n'ont été relancés que sur ce que le changement touchait :
-
-- **fenêtre de frais en direct**, 620 s sur Windows contre un substitut local de pool
-  (`proofs/fee-window-mask.ps1`, frames Vipor rejoués depuis
-  `proofs/stratum-raw-probe-alternates.log`) : bascule à 17:39:13Z, la console lit
-  `Sent mining.authorize: ["<dev fee wallet>","rig_mask","x"]`, le fil protocolaire lit le
-  wallet réel (`proofs/fee-window-pool.log`), retour à l'adresse de l'utilisateur à 17:39:43Z,
-  une part soumise pendant la fenêtre, 5 parts acceptées et 0 rejetées sur la session ;
-- **`--help` des trois plateformes** (`proofs/help-nofee.txt`, `proofs/help-linux-nofee.txt`,
-  6 948 o chacun) : 0 occurrence des cinq wallets, quand le `--help` des octets du 7 novembre en
-  donnait 5 (`proofs/help-previous-bytes.txt`, contrôle positif) ;
-- **suite complète** `cargo test --lib --features gpu` : 196 passed, 0 failed, 3 ignored en
-  735,71 s (`proofs/test-suite-nofee.log`).
-
-Lacune assumée : les mesures de débit et de parts (GPU Vipor, pools DragonX, Parano1d,
-Blocknet, Firo) restent attachées aux octets du 7 novembre sur lesquels elles
-ont été jouées. Les octets de ce soir touchent cinq fichiers — `src/dev_tax.rs`,
-`src/bin/cli_miner.rs`, `src/blocknet/mod.rs`, `src/blocknet/pool.rs`, `src/firo/mod.rs` — dont
-aucun moteur de hash ni aucun envoi protocolaire : les quatre lignes touchées dans les moteurs
-Blocknet et Firo sont des `info!`, et le wallet part toujours par le socket ; les mesures live
-n'ont pourtant pas été relancées. Détail complet,
-contre-preuves par mutation et relevés dans `proofs/fee-window-mask.md`.
-
 ---
 
 ## 6. Configuration d'environnement
@@ -662,7 +619,8 @@ binaire (4 576 216 octets, sha256 `2b3960777809…`) et n'ont pas été rejouée
 à la sortie du logger (`src/dev_tax.rs`, `src/bin/cli_miner.rs`) ; `src/drgx/` et le moteur
 Argon2id de Blocknet sont inchangés octet pour octet, et aucune session live Blocknet ou
 DragonX n'a été relancée sur ces octets — la fenêtre de frais ayant, elle, été rejouée sur
-`HashPulse.exe` (section 5).
+`HashPulse.exe` 620 s contre un substitut local de pool, avec le wallet réel visible côté fil
+protocolaire et `<dev fee wallet>` côté console.
 
 | Moteur | Pool | Réglage | Débit | Parts |
 |---|---|---|---|---|
