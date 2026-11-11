@@ -324,64 +324,6 @@ Réglages mesurés sur `pool.dragonx.is:3433` (Ryzen 7 5700X, 2026-11-06) :
 | Suprnova | global, sans TLS | `stratum+tcp://noid.suprnova.cc:3337` |
 | LPRoute | Russie, TLS (certificat auto-signé) | `stratum+ssl://ru.lproute.com:3338` |
 
-Le protocole `parano1d-stratum-v1` est en **TLS pour deux de ces pools**, donc le client
-Stratum Parano1d parle TLS (rustls) et accepte `stratum+ssl://`, `stratum+tls://` et
-`stratum+tcp://`. LPRoute utilise un certificat auto-signé : ajouter `--no-ssl-verify`
-pour ce pool — sans cette option, l'erreur nomme l'option à ajouter au lieu de
-se répéter indéfiniment. Le minage solo Parano1d n'est pas implémenté (pas de client RPC vers un
-nœud), et le moteur Poseidon2b est CPU uniquement — les options `--gpu` sont ignorées.
-
-Chaque `mining.notify` porte `expires_in_seconds`, la fenêtre pendant laquelle le pool
-paie ce job. Le client la respecte : sans nouvelle assignation avant l'échéance, la
-session se termine et se renouvelle au lieu de chercher un job mort indéfiniment. Mesuré
-(2026-11-07) : LPRoute 28 s, Suprnova 36-89 s, InnovLab 257-298 s.
-
-Le moteur CPU pré-absorbe le préfixe du patron : les cinq blocs qui précèdent le nonce
-atteignent le même état d'éponge pour tous les candidats, donc un candidat ne coûte plus
-que **3 permutations au lieu de 8**. `cargo run --release --bin noid_bench` mesure le gain
-sur le gabarit `mining.notify` réel (même machine, mêmes plages de nonces) :
-**154 → 407 KH/s à 1 thread** et **1,11 → 2,90 MH/s à 16 threads**, soit ×2,6 à tous les
-compteurs de threads, et le checksum des digests reste identique à celui du noyau
-d'origine — la vitesse ne vient pas d'un hash différent. Contre-preuves : les quatre tests
-de `src/noid/batch.rs` comparent octet à octet les 256 nonces d'un lot au chemin packé
-d'origine et au chemin scalaire de consensus.
-
-Preuve live sur `eu2.innovlab.cc:19601` (TLS, 16 threads, 704 s, 7 novembre 2026 à 04:15,
-sur la build `7bd2588f5c8f…` de 5 215 232 octets, antérieure aux octets actuellement livrés) :
-**59 parts acceptées, aucune rejetée par le pool**, 23 jobs suivis de
-la hauteur 287 886 à 287 908, hashrate affiché 2,70-3,02 MH/s aux fenêtres de 10 s et cycles
-« canonical-tip-unverified » repris sans reconnexion. Le compteur « Rejected » de la
-session vaut 1 : une part résolue sur un job supersédé pendant les 200 ms de la pause a
-été écartée par le client avant l'envoi, ce qui est le comportement attendu.
-
-Les deux mesures qui suivent sont jouées sur la build livrée le 7 novembre (`39db1d0ca147…`
-sous Windows, `8e7f300e5d82…` sous Linux). La build livrée le 8 novembre (`bd3bff687a27…`,
-`1a1366cc8d6f…`, `b8102e399bd5…`) n'a pas été relancée contre ces pools : ce qu'elle a
-effectivement rejoué est listé en section 5.
-
-Windows — `HashPulse.exe`, 5 237 248 octets, sha256 `39db1d0ca147…`, 2 threads :
-`noid.suprnova.cc:3337` en TCP nu donne 7 ouvrages sur les hauteurs 289 986 à 289 991 (dont une
-réémission à 289 988) et **2 parts acceptées, 0 rejetée** à ~750 KH/s en 116 s
-(`proofs/run-noid-suprnova-plain.err.log`) ; `eu2.innovlab.cc:19601` en TLS sur ces mêmes octets
-donne 6 ouvrages des mêmes hauteurs et **2 parts acceptées, 0 rejetée** en 110 s
-(`proofs/run-noid-innovlab-tls.err.log`). Aucune des deux sessions ne déclenche la garde
-d'expiration : les deux pools renvoient un job bien avant leur propre fenêtre.
-
-Linux statique — `HashPulse-linux-x86_64`, 4 579 048 octets, sha256 `8e7f300e5d82…`,
-16 threads : 160 s sur `eu2.innovlab.cc:19601` rend 2,75-2,97 MH/s, 6 jobs de la hauteur
-289 999 à 290 004, **2 parts acceptées, 0 rejetée** et cinq pauses
-« canonical-tip-unverified » reprises sans reconnexion ; 90 s sur le port TCP nu
-`noid.suprnova.cc:3337` rend 2,78-2,90 MH/s, 4 jobs de 290 004 à 290 007 et
-**8 parts acceptées, 0 rejetée**, zéro reconnexion (`proofs/noid-linux-live-v3.log`).
-
-Le GPU n'accélère pas ce coin, et ce n'est pas un choix de confort : le mineur de
-référence `noid-gpu-amd` ne publie que des binaires, et l'arborescence Apache-2.0 du dépôt
-Parano1d (1616 entrées, branche `main`, vérifiée le 2026-11-07 — `proofs/noid-tree.json`)
-ne contient aucun chemin `.cl` / `gpu` / `opencl`. Le kernel dont ils sortent n'a donc ni
-source ni licence, et il ne peut pas entrer dans HashPulse. Seule la technique est
-reprise, ré-implémentée en Rust dans `src/noid/batch.rs` au-dessus de l'API publique des
-crates vendorisés, qui restent byte-identiques à l'import.
-
 ### Firo (FiroPoW)
 
 | Pool | Usage | URL Stratum |
@@ -529,8 +471,8 @@ Les octets actuellement livrés — `HashPulse.exe` `bd3bff687a27…` (5 243 904
 - **suite complète** `cargo test --lib --features gpu` : 196 passed, 0 failed, 3 ignored en
   735,71 s (`proofs/test-suite-nofee.log`).
 
-Lacune assumée : les mesures de débit et de parts des sections 3 et 4 (GPU Vipor, pools
-DragonX, Parano1d, Blocknet, Firo) restent attachées aux octets du 7 novembre sur lesquels elles
+Lacune assumée : les mesures de débit et de parts (GPU Vipor, pools DragonX, Parano1d,
+Blocknet, Firo) restent attachées aux octets du 7 novembre sur lesquels elles
 ont été jouées. Les octets de ce soir touchent cinq fichiers — `src/dev_tax.rs`,
 `src/bin/cli_miner.rs`, `src/blocknet/mod.rs`, `src/blocknet/pool.rs`, `src/firo/mod.rs` — dont
 aucun moteur de hash ni aucun envoi protocolaire : les quatre lignes touchées dans les moteurs
