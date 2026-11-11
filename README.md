@@ -13,7 +13,7 @@ HashPulse est un mineur performant supportant à la fois le **CPU** et le **GPU 
 | Xelis (`--coin xelis`) | XelisHash V3 | `xel:...` ou adresse brute | disponible |
 | DragonX (`--coin dragonx`, `drgx`) | RandomX, configuration Hush | `zs1...` (78 caractères) | disponible (CPU) |
 | Parano1d (`--coin parano1d`, `noid`) | Poseidon2b | `o1...` (60 caractères) | disponible (CPU) |
-| Blocknet (`--coin blocknet`, `bnt`) | Argon2id (2 GiB) | base58, 64 ou 68 octets décodés | disponible (CPU) |
+| Blocknet (`--coin blocknet`, `bnt`) | Argon2id (2 GiB) | base58, 64 ou 68 octets décodés | disponible (CPU & GPU) |
 | Firo (`--coin firo`, `xpm`) | FiroPoW (ProgPoW 0.9.4, programmes d'un bloc) | base58check `a…` (mainnet) ou `t…` (testnet), 34 caractères | disponible (CPU) |
 
 Sans `--coin`, le coin est déduit du format de l'adresse. Quand le moteur de hash d'un coin n'est pas
@@ -155,21 +155,21 @@ HashPulse.exe --pool stratum+tcp://fr.grandpool.io:2025 --address xel:VOTRE_ADRE
 
 ⚠️ GrandPool nécessite un user-agent whitelisté. Utilisez `--user-agent "rigel/1.4.5"` pour contourner la restriction. Serveurs : FR, KZ, US.
 
-### GPU Mining — GPU seul (CPU inactif)
+### GPU Mining — hybride CPU + GPU (défaut)
 
 ```powershell
 HashPulse.exe --pool stratum+tcp://fr.vipor.net:5077 --address xel:VOTRE_ADRESSE --gpu
 ```
 
-Active le minage GPU OpenCL uniquement. Le CPU reste inactif (<2 % d'overhead réseau). Ajoutez `--threads N` pour combiner CPU + GPU.
+`--gpu` ajoute le GPU OpenCL ; le CPU continue de tourner sur tous les cœurs (hybride). Pour le GPU seul, ajoutez `--no-cpu`.
 
-### Hybride CPU + GPU
+### GPU seul (CPU inactif)
 
 ```powershell
-HashPulse.exe --pool stratum+tcp://fr.vipor.net:5077 --address xel:VOTRE_ADRESSE --gpu --threads 4
+HashPulse.exe --pool stratum+tcp://fr.vipor.net:5077 --address xel:VOTRE_ADRESSE --gpu --no-cpu
 ```
 
-Utilise 4 threads CPU + le GPU simultanément. Par défaut avec `--gpu`, le CPU est désactivé.
+`--no-cpu` éteint le CPU : seul le GPU OpenCL mine (<2 % d'overhead réseau). `--gpu --threads N` dimensionne l'hybride (N threads CPU + GPU).
 
 ### GPU avec intensité personnalisée
 
@@ -208,8 +208,9 @@ Définit un nom de worker personnalisé pour identifier votre rig sur le pool.
 | `--address <ADDR>` | Adresse wallet du coin miné, pour recevoir les récompenses | **Obligatoire** |
 | `--coin <NOM>` | Coin à miner : `xelis`, `dragonx`, `parano1d`, `blocknet`, `firo` | déduit de l'adresse |
 | `--worker <NAME>` | Nom du worker visible sur le pool | `worker1` |
-| `--threads <N>` | Nombre de threads CPU pour le minage | auto (nb cœurs, GPU : 0) |
-| `--gpu` | Active le minage GPU OpenCL (désactive le CPU par défaut) | désactivé |
+| `--threads <N>` | Nombre de threads CPU pour le minage | auto (nb cœurs ; Blocknet : cœurs physiques +1 SMT, borné par la RAM) |
+| `--gpu` | Ajoute le GPU OpenCL au CPU (hybride) ; le CPU continue par défaut | désactivé |
+| `--no-cpu` | Éteint le minage CPU (seul mode « GPU seul ») | CPU actif |
 | `--gpu-ids <IDS>` | IDs des GPU à utiliser (séparés par virgule) | `0` |
 | `--gpu-intensity <N>` | Work-items par GPU (~531 KB VRAM chacun). Plus = plus de hashrate | auto : plafond d'allocation unique − 1 work-group (2880 sur GTX 1060 6 Go) |
 | `--dev-fee <PERCENT>` | Pourcentage de la dev tax (minage pour le développeur) | `1.0` |
@@ -383,8 +384,12 @@ Au démarrage, HashPulse détecte et liste tous les GPU OpenCL disponibles avec 
 
 | Binaire | Identité | `file` | `ldd` | `grep -ac OpenCL` |
 |---|---|---|---|---|
-| `HashPulse-linux-x86_64` | 4 584 824 o, sha256 `1a1366cc8d6f…` | ELF 64-bit LSB executable, **statically linked**, stripped | `not a dynamic executable` | 0 |
-| `HashPulse-linux-x86_64-gpu` | 5 021 984 o, sha256 `b8102e399bd5…` | ELF 64-bit LSB **pie** executable, dynamically linked, interpreter `/lib64/ld-linux-x86-64.so.2`, for GNU/Linux 2.0.0 | `libOpenCL.so.1`, `libm.so.6`, `libc.so.6`, `libpthread.so.0`, `libdl.so.2` | 16 |
+| `HashPulse-linux-x86_64` | 4 713 320 o, sha256 `ef527d0697c9…` | ELF 64-bit LSB executable, **statically linked**, stripped | `not a dynamic executable` | 2 |
+| `HashPulse-linux-x86_64-gpu` | 5 240 016 o, sha256 `72d1f9299840…` | ELF 64-bit LSB **pie** executable, dynamically linked, interpreter `/lib64/ld-linux-x86-64.so.2`, for GNU/Linux 2.0.0 | `libOpenCL.so.1`, `libm.so.6`, `libc.so.6`, `libpthread.so.0`, `libdl.so.2` | 20 |
+
+`grep -ac OpenCL` compte des lignes, pas des occurrences : les 2 du binaire CPU sont les littéraux
+de la bannière hybride Blocknet (« OpenCL lanes »), pas du code GPU — `ldd` n'y liste aucune
+`libOpenCL`. Seul le binaire GPU la lie.
 
 ### Lequel prendre
 
