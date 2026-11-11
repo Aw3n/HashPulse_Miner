@@ -88,7 +88,7 @@ Firo se mine soit contre un pool, soit contre son propre nœud : `--daemon` pren
 RPC de `firod` (port 8382 en mainnet), et les identifiants sont ceux de `firo.conf`
 (`rpcuser` / `rpcpassword`). Ils peuvent aussi être écrits dans l'URL :
 `--daemon http://rpcuser:rpcpass@127.0.0.1:8382`.
-Voir [Firo](#firo-fipopw) pour les prérequis de mémoire.
+Voir `HashPulse-Guide.html` (livré dans l'archive) pour les prérequis de mémoire de FiroPoW.
 
 ### Pool Mining — Firo (WoolyPooly)
 
@@ -295,38 +295,6 @@ pour un mineur CPU, il faut passer par `--pool`.
 ```powershell
 HashPulse.exe --coin firo --pool stratum+tcp://pool.woolypooly.com:3104 --address VOTRE_ADRESSE_FIRO --worker rig_01
 ```
-
-Le mode 0 du protocole (un seul hash par part, le job fournit l'en-tête complet) est ce
-que parlent ces deux pools : `mining.subscribe` / `mining.authorize` avec
-`wallet.worker`, puis `mining.notify [job, header, seed, target, clean, height, nbits]`
-et `mining.submit [user, job, 0x<nonce>, 0x<header>, 0x<mix>]`. `stratum+ssl://` et
-`stratum+tls://` passent par rustls, une URL sans schéma ou `stratum+tcp://` reste en TCP nu.
-
-Solo, c'est la même chose avec `--daemon` (voir §2) : le client parle `getblocktemplate`
-au RPC du core et soumet par `pprpcsb`.
-
-Réglages mesurés sur mainnet (bloc ≈ 1 407 590, Ryzen 7 5700X, 12 threads) :
-
-- **FiroPoW = ProgPoW 0.9.4 avec `kPeriodLength = 1`** : le programme de hash est
-  régénéré à chaque bloc au lieu de tourner tous les 50 blocs, et chaque nonce est
-  brouillé contre une portion différente du dataset. C'est ce qui résiste aux ASIC, et
-  ce qui rend le `mix_hash` obligatoire dans la part.
-- **6,58 GiB de dataset à l'epoch 650** (l'epoch est `hauteur / 1300`, plafonnée à 650 ;
-  le dataset ne change plus après). Construction mesurée : **383 s à 12 threads**,
-  ~2,2 GiB/s. Prévoyez la RAM en conséquence : HashPulse matérialise le dataset complet,
-  parce que le repli sur le cache léger divise le débit par ~700 (353 s par digest).
-- **Débit attendu : ~75 KH/s à 12 threads** (crête mesurée 82,3 KH/s), soit ~6 KH/s par
-  thread. Les pools GPU annoncent des MH/s ; un CPU FiroPoW rend des KH/s, ce n'est pas
-  la même échelle.
-- **Difficulté de part 2³² (4 294 967 296)** chez WoolyPooly : à 75 KH/s, une part
-  tombe en moyenne toutes les ~16 h. La session de preuve (1 696 s, 63 jobs, 0 rejet)
-  n'a donc logiquement pas produit de part : ce qu'elle prouve, c'est le handshake,
-  l'autorisation, le suivi des jobs à bloc, le cycle de dev tax et l'absence de rejet.
-- Les options `--gpu` sont ignorées : ce build n'a pas de kernel FiroPoW OpenCL.
-
-L'adresse est du base58check : `a…` en mainnet, `t…` en testnet, 34 caractères. La
-somme de contrôle est vérifiée avant la connexion, donc une adresse mal recopiée est
-refusée avec la raison exacte plutôt que par le pool.
 
 ### Blocknet (Argon2id)
 
