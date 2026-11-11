@@ -80,7 +80,7 @@ HashPulse.exe --daemon http://127.0.0.1:8332 --address VOTRE_ADRESSE_BLOCKNET
 Blocknet se mine contre son propre core : l'API HTTP remplace le daemon Xelis. Le jeton
 est lu dans `api.cookie` du répertoire du nœud (override avec `--api-token`, ou
 `--api-cookie <fichier>` si le core n'est pas installé à l'endroit par défaut).
-Voir [Blocknet](#blocknet-argon2id) pour les prérequis.
+Voir [Blocknet](#blocknet-argon2id) pour le drapeau `-api` du core.
 
 ### Solo Mining — Firo (nœud firod local)
 
@@ -342,59 +342,14 @@ refusée avec la raison exacte plutôt que par le pool.
 
 ### Blocknet (Argon2id)
 
-Blocknet se mine en pool ou en solo. En pool, HashPulse parle le protocole JSON-lines du
-mineur officiel `seine` : `--pool` est attendu ici, pas une adresse de daemon. En solo, le
-minage passe par l'API HTTP du core, que le core n'ouvre que si on le lui demande : c'est
-`-api <adresse>` (ex. `127.0.0.1:8332`) qui l'allume, et `--daemon` doit reprendre exactement
-cette adresse.
+Blocknet se mine en pool ou en solo. En solo, le minage passe par l'API HTTP du core, que le
+core n'ouvre que si on le lui demande : c'est `-api <adresse>` (ex. `127.0.0.1:8332`) qui
+l'allume, et `--daemon` doit reprendre exactement cette adresse.
 
 ```powershell
 HashPulse.exe --coin blocknet --pool stratum+tcp://bntpool.com:3333 --address VOTRE_ADRESSE_BLOCKNET --worker rig_01
 HashPulse.exe --coin blocknet --daemon http://127.0.0.1:8332 --address VOTRE_ADRESSE_BLOCKNET
 ```
-
-Prérequis et réglages mesurés :
-
-- **Un core Blocknet à jour, démarré avec son API** (solo) : `-api 127.0.0.1:8332`. Sans ce
-  drapeau le core ne sert aucune route de minage et n'écrit pas de jeton. Le jeton est
-  écrit sous `<répertoire du nœud>/api.cookie` (`./blocknet-data-mainnet` par défaut,
-  0600, supprimé à l'arrêt) et HashPulse le lit tout seul ; `--api-token` ou
-  `--api-cookie` le donnent sinon.
-- **Le wallet Blocknet pour Windows se suffit à lui-même** : il démarre son propre core
-  avec `--api 127.0.0.1:18432` et écrit son jeton dans
-  `%APPDATA%\com.blocknet.wallet\data\api.cookie`, sans sous-répertoire de réseau.
-  HashPulse sonde `BNT_CONFIG_DIR`, `~/.config/bnt` et ce répertoire, avec et sans
-  sous-répertoire `mainnet` / `testnet` : `--daemon http://127.0.0.1:18432` suffit alors.
-- **Ne pas lancer le minage interne du core en même temps** (`POST /api/mining/start`) :
-  chaque thread Argon2id, où qu'il soit, réserve 2 GiB.
-- **2 GiB de RAM par thread.** Argon2id est un PoW à mémoire : la dureté est l'arena,
-  pas le temps CPU. Sans `--threads`, HashPulse choisit un thread et n'en ajoute que si
-  la RAM libre physique le permet (il garde 1 GiB de marge pour le système).
-- **Débit attendu : ~0,8 H/s par thread**, soit ~1,25 s par hash. À la difficulté
-  actuelle du mainnet (≈ 23 M, réseau à ≈ 100 kH/s), un thread seul en solo part sur une
-  dizaine de mois avant un bloc : ce mode ne se choisit que pour soutenir le réseau ou si
-  l'on groupe plusieurs machines.
-- **En pool, le même thread est payé en minutes.** `bntpool.com:3333` attribue une
-  difficulté de part de 60 (et l'ajuste seul, observé jusqu'à 112) : sur 700 s avec un seul
-  thread, **4 parts acceptées, 0 rejetée, la première 23 s après le login**, 11 jobs suivis
-  sur les blocs 72664→72666. Le protocole est celui du mineur officiel `seine` (BSD-3) :
-  une ligne JSON par message, `login` avec les capacités, `job` avec `header_base`, `target`
-  et la plage de nonces, `submit` avec le `claimed_hash`, `refill` quand la plage est
-  épuisée, keepalive `\n` après 10 s d'inactivité.
-- **Au-delà de la hauteur 103 680**, le PoW de Blocknet devient du BLAKE2b-512 et le source
-  amont marque ces paramètres non définitifs : HashPulse refuse l'ouvrage (solo comme pool)
-  et ne déclare pas `pow_blake2b_v1` au login, donc un pool qui bascule lui demande une mise
-  à jour au lieu de voir empiler des parts rejetées.
-- Les options `--gpu` sont ignorées : l'arena de 2 GiB ne tient pas dans une carte, et
-  le gain d'Argon2id vient justement de la mémoire système.
-
-L'adresse acceptée est du base58 sur 64 octets (ancien format, sans somme de contrôle)
-ou 68 octets (les deux clés + somme de contrôle SHA3-256). La somme de contrôle est
-vérifiée avant la première connexion, comme le fait le nœud : une adresse mal recopiée
-est refusée avec la raison exacte (« invalid address checksum », « not base58 », ou la
-longueur décodée) au lieu de se terminer en un 400 incompréhensible. Les réseaux mainnet
-et testnet sont acceptés, car le core ne le dit pas à l'API : minez sur le réseau où se
-trouve votre nœud.
 
 ---
 
