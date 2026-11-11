@@ -387,7 +387,7 @@ Au démarrage, HashPulse détecte et liste tous les GPU OpenCL disponibles avec 
 
 ## 8. Fonctionnement sous Linux
 
-### Les deux binaires, tels qu'ils sont sur le disque
+### Les deux binaires, tels qu'ils sont ici
 
 | Binaire | Identité | `file` | `ldd` | `grep -ac OpenCL` |
 |---|---|---|---|---|
