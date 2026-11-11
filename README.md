@@ -408,11 +408,6 @@ sudo pacman -S opencl-icd-loader
 sudo dnf install ocl-icd
 ```
 
-Le paquet n'apporte que le chargeur ; la plateforme OpenCL elle-même vient du driver du
-constructeur (NVIDIA, AMD, Intel). La raison pour laquelle le GPU n'est pas non plus statique
-est écrite dans l'en-tête de `xelis-miner/build_linux.sh` : une libc musl statique n'a pas de
-`dlopen()` exploitable, donc ne peut pas charger l'ICD du constructeur au runtime.
-
 ### Premier lancement
 
 ```bash
