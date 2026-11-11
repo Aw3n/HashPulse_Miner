@@ -571,29 +571,6 @@ protocolaire et `<dev fee wallet>` côté console.
 | DragonX | `pool.dragonx.is:3433` | 6 threads, 305 s | 85 H/s | 19 acceptées, 0 rejetée (`proofs/linux-dragonx-v2.log`) |
 | Blocknet | `bntpool.com:3333` | 1 thread (auto, RAM), 480 s | 0,30–0,40 H/s | 3 acceptées, 0 rejetée (`proofs/linux-blocknet-v2.log`) |
 
-Deux réservations, consignées plutôt que gommées. Les sept parts DragonX à 16 threads sont
-tombées sur les 45 dernières secondes, après 244 s sans part à débit plein, sans erreur ni
-`Duplicate share` dans le journal : allure du pool non élucidée. Pour Blocknet, deux tentatives
-plus courtes sur le même binaire n'avaient donné aucune part (120 s, puis 260 s avec un
-`Discarding nonce … found for an older job`), et la difficulté de part est montée de 60 à 112
-sans reconnexion — compter « une part en 75 s » sur ce moteur était un tirage chanceux, pas
-une propriété du binaire : à 0,40 H/s et difficulté 60, le pool lui-même annonçait « 2 minutes »,
-puis 3, puis 4 à mesure que la difficulté montait.
-
-### Régénérer les deux binaires
-
-```bash
-cd xelis-miner && bash build_linux.sh
-```
-
-Dépendances d'une seule traite (bloc d'en-tête du script) : `build-essential` et
-`pkg-config`, les targets rustup `x86_64-unknown-linux-musl` et `x86_64-unknown-linux-gnu`,
-zig 0.16.0 et `cargo-zigbuild`. Zig est obligatoire, pas décoratif : RandomX est du C++ et il
-n'existe pas de g++ musl, donc `zig c++` est le seul driver à porter les en-têtes C++ et une
-libc++ pour musl. La build est reproductible à l'octet près : reprise le 7 novembre à 22:11 sur
-les octets livrés, elle a redonné `8e7f300e5d82…` et `d0aa02e60a47…`, c'est-à-dire les deux
-fichiers bit à bit identiques à ceux de l'archive (`proofs/linux-repro-rebuild.log`).
-
 ---
 
 <div align="center">
