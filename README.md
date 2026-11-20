@@ -384,8 +384,8 @@ Au démarrage, HashPulse détecte et liste tous les GPU OpenCL disponibles avec 
 
 | Binaire | Identité | `file` | `ldd` | `grep -ac OpenCL` |
 |---|---|---|---|---|
-| `HashPulse-linux-x86_64` | 4 715 256 o, sha256 `9c9200088e91…` | ELF 64-bit LSB executable, **statically linked**, stripped | `not a dynamic executable` | 2 |
-| `HashPulse-linux-x86_64-gpu` | 5 245 984 o, sha256 `fc3be01096d7…` | ELF 64-bit LSB **pie** executable, dynamically linked, interpreter `/lib64/ld-linux-x86-64.so.2`, for GNU/Linux 2.0.0 | `libOpenCL.so.1`, `libm.so.6`, `libc.so.6`, `libpthread.so.0`, `libdl.so.2` | 20 |
+| `HashPulse-linux-x86_64` | 4 715 448 o, sha256 `549a275808a2…` | ELF 64-bit LSB executable, **statically linked**, stripped | `not a dynamic executable` | 2 |
+| `HashPulse-linux-x86_64-gpu` | 5 246 176 o, sha256 `a55f26f3a491…` | ELF 64-bit LSB **pie** executable, dynamically linked, interpreter `/lib64/ld-linux-x86-64.so.2`, for GNU/Linux 2.0.0 | `libOpenCL.so.1`, `libm.so.6`, `libc.so.6`, `libpthread.so.0`, `libdl.so.2` | 20 |
 
 `grep -ac OpenCL` compte des lignes, pas des occurrences : les 2 du binaire CPU sont les littéraux
 de la bannière hybride Blocknet (« OpenCL lanes »), pas du code GPU — `ldd` n'y liste aucune
