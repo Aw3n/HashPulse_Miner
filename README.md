@@ -219,7 +219,7 @@ Définit un nom de worker personnalisé pour identifier votre rig sur le pool.
 | `--address <ADDR>` | Adresse wallet du coin miné, pour recevoir les récompenses | **Obligatoire** |
 | `--coin <NOM>` | Coin à miner : `xelis`, `dragonx`, `parano1d`, `blocknet`, `firo`, `kerrigan` | déduit de l'adresse |
 | `--worker <NAME>` | Nom du worker visible sur le pool | `worker1` |
-| `--threads <N>` | Nombre de threads CPU pour le minage | auto (nb cœurs ; Blocknet : cœurs physiques +1 SMT, borné par la RAM) |
+| `--threads <N>` | Nombre de threads CPU pour le minage | auto (nb cœurs ; Blocknet : cœurs physiques +1 SMT, borné par la RAM ; Kerrigan CPU-seul : cœurs physiques, 4 GiB réservés à l'OS ; Kerrigan `--gpu` : ~1/8 des cœurs) |
 | `--gpu` | Ajoute le GPU OpenCL au CPU (hybride) ; le CPU continue par défaut | désactivé |
 | `--no-cpu` | Éteint le minage CPU (seul mode « GPU seul ») | CPU actif |
 | `--gpu-ids <IDS>` | IDs des GPU à utiliser (séparés par virgule) | `0` |
@@ -338,6 +338,18 @@ nombre de parts acceptées inchangés. `--threads N` fixe explicitement N thread
 L'attente des kernels GPU se fait par sonde d'événement + pause de 1 ms plutôt que par
 `clFinish` (qui occupait un cœur à tourner à vide), et l'histogramme de tri est remis à zéro
 côté device plutôt que téléversé depuis l'hôte.
+
+**Stabilité du bureau (anti-gel).** L'arbre de Wagner est borné par le consensus à ~4,8 GiB
+de VRAM et ne peut pas rétrécir ; sur une carte 6 GiB il ne restait que ~400 MiB au
+compositeur Windows, et le GPU tournait à ~100 % en continu — la session gelait. Trois
+garde-fous : (1) une pause bureau de 5 ms après chaque kernel GPU rend régulièrement la main
+à DWM (util GPU moyenne mesurée 86 % → 79 % sur GTX 1060, fenêtre de 70 s) ; (2) l'hybride
+ne démarre que si la carte laisse **≥1 GiB de VRAM au desktop** une fois l'arbre résident —
+sinon HashPulse retombe sur le CPU-seul au lieu de sur-allouer la VRAM et de faire paginer
+Windows ; (3) sur le chemin CPU-seul, 4 GiB de RAM sont réservés à l'OS (au lieu de 2) et les
+solveurs auto sont bornés aux **cœurs physiques** (les siblings SMT thrashent la mémoire sans
+gagner de solutions). Le gate consensus GPU bit-exact est rejoué à chaque changement : la
+pause et les réserves ne modifient aucune solution.
 
 ```powershell
 HashPulse.exe --coin kerrigan --pool stratum+tcp://mine.kerriganpool.com:7203 --address VOTRE_ADRESSE_KERRIGAN --worker rig_01 --gpu
