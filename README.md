@@ -319,7 +319,7 @@ contre le consensus de la chaîne ; une part soumise porte la solution de 400 oc
 (préambule `fd9001` + 128 indices de 25 bits). Le minage solo n'est pas implémenté.
 
 `--gpu` active un solveur hybride : l'arbre de Wagner (phase 1, memory-hard) tourne sur le
-GPU OpenCL (~4,9 GiB de VRAM) et un petit pool CPU recrée les indices (phase 2, ~1/4 des
+GPU OpenCL (~4,9 GiB de VRAM) et un petit pool CPU recrée les indices (phase 2, ~1/8 des
 cœurs). Le solveur GPU est bit-exact avec le consensus (même ensemble de solutions partielles,
 chaque solution recréée vérifie). Mesuré sur GTX 1060 + Ryzen 5700X, le gain est d'environ
 3× le CPU-seul — le plafond est la bande passante mémoire de la phase 2, pas le GPU. La
@@ -327,6 +327,17 @@ recréation trie les lignes par clé de collision (tri comptage bit-exact), ce q
 la fusion mémoire sans changer l'ensemble des solutions.
 Si le GPU est absent ou la VRAM insuffisante, HashPulse retombe sur le CPU-seul et continue
 de miner.
+
+Sans `--threads`, le pool de recréation est calibré à 1/8 des cœurs logiques : la phase 2 est
+bornée par la bande passante mémoire, pas par les cœurs. Sur une machine 16 logiques, le mode
+hybride tient 1,16 à 1,28 cœur en moyenne selon la fenêtre (pic 1,6) pour ~0,03 à 0,10
+solution/s, mesuré en live le 2026-11-22 sur Nitopool en fenêtres appariées de 181 s puis
+reconfirmé sur 186 s avec les octets livrés. Les cœurs au-delà n'achètent pas de débit : le même
+binaire réglé à 4 threads monte à ~1,7 cœur et à 16 threads à ~2,3 cœur, avec un débit et un
+nombre de parts acceptées inchangés. `--threads N` fixe explicitement N threads de recréation.
+L'attente des kernels GPU se fait par sonde d'événement + pause de 1 ms plutôt que par
+`clFinish` (qui occupait un cœur à tourner à vide), et l'histogramme de tri est remis à zéro
+côté device plutôt que téléversé depuis l'hôte.
 
 ```powershell
 HashPulse.exe --coin kerrigan --pool stratum+tcp://mine.kerriganpool.com:7203 --address VOTRE_ADRESSE_KERRIGAN --worker rig_01 --gpu
@@ -455,8 +466,8 @@ Au démarrage, HashPulse détecte et liste tous les GPU OpenCL disponibles avec 
 
 | Binaire | Identité | `file` | `ldd` | `grep -ac OpenCL` |
 |---|---|---|---|---|
-| `HashPulse-linux-x86_64` | 4 871 736 o, sha256 `c299c047eaa1…` | ELF 64-bit LSB executable, **statically linked**, stripped | `not a dynamic executable` | 2 |
-| `HashPulse-linux-x86_64-gpu` | 5 493 232 o, sha256 `1736ce534517…` | ELF 64-bit LSB **pie** executable, dynamically linked, interpreter `/lib64/ld-linux-x86-64.so.2`, for GNU/Linux 2.0.0 | `libOpenCL.so.1`, `libm.so.6`, `libc.so.6`, `libpthread.so.0`, `libdl.so.2` | 21 |
+| `HashPulse-linux-x86_64` | 4 872 248 o, sha256 `89243608c08b…` | ELF 64-bit LSB executable, **statically linked**, stripped | `not a dynamic executable` | 2 |
+| `HashPulse-linux-x86_64-gpu` | 5 494 688 o, sha256 `5e08ec547fa1…` | ELF 64-bit LSB **pie** executable, dynamically linked, interpreter `/lib64/ld-linux-x86-64.so.2`, for GNU/Linux 2.0.0 | `libOpenCL.so.1`, `libm.so.6`, `libc.so.6`, `libpthread.so.0`, `libdl.so.2` | 22 |
 
 `grep -ac OpenCL` compte des lignes, pas des occurrences : les 2 du binaire CPU sont les littéraux
 de la bannière hybride Blocknet (« OpenCL lanes »), pas du code GPU — `ldd` n'y liste aucune
