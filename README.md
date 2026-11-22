@@ -338,6 +338,9 @@ HashPulse.exe --coin kerrigan --pool stratum+tcp://mine.kerriganpool.com:7203 --
 | KerriganPool | SOLO | `stratum+tcp://mine.kerriganpool.com:7213` |
 | zpool | multipool, TCP | `stratum+tcp://equihash192.mine.zpool.ca:2192` |
 | zpool | multipool, TLS | `stratum+ssl://equihash192.mine.zpool.ca:52192` |
+| VeinPool (FR) | PPLNS | `stratum+tcp://veinpool.fr:3280` |
+| VeinPool (FR) | SOLO | `stratum+tcp://veinpool.fr:3282` |
+| VeinPool (FR) | PPLNS, TLS | `stratum+ssl://veinpool.fr:13280` |
 
 ```powershell
 HashPulse.exe --coin kerrigan --pool stratum+tcp://mine.kerriganpool.com:7203 --address VOTRE_ADRESSE_KERRIGAN --worker rig_01
@@ -345,9 +348,10 @@ HashPulse.exe --coin kerrigan --pool stratum+tcp://mine.kerriganpool.com:7203 --
 
 `--coin` est facultatif : une adresse `K…` (34 caractères) désigne Kerrigan à elle seule.
 Sur zpool (multipool), `--password c=KRGN` sélectionne le paiement en KRGN. Le client
-n'accepte qu'un `mining.notify` épinglé sur la personalisation « kerrigan » : si un pool
-renvoie une autre variante d'Equihash, HashPulse refuse de miner plutôt que de soumettre
-des solutions que la chaîne rejetterait.
+accepte le `mining.notify` standard à 8 champs (veinpool.fr) comme la forme Miningcore à
+10 champs qui ajoute les tags algo/personalisation (kerriganpool.com) : l'algorithme est
+épinglé sur Equihash 192,7 / « kerrigan » par `--coin`, et un tag présent qui nommerait une
+autre variante d'Equihash est refusé plutôt que miné en solutions que la chaîne rejetterait.
 
 ---
 
@@ -433,8 +437,8 @@ Au démarrage, HashPulse détecte et liste tous les GPU OpenCL disponibles avec 
 
 | Binaire | Identité | `file` | `ldd` | `grep -ac OpenCL` |
 |---|---|---|---|---|
-| `HashPulse-linux-x86_64` | 4 871 128 o, sha256 `dbce82a28273…` | ELF 64-bit LSB executable, **statically linked**, stripped | `not a dynamic executable` | 2 |
-| `HashPulse-linux-x86_64-gpu` | 5 487 632 o, sha256 `82efeb5dfc84…` | ELF 64-bit LSB **pie** executable, dynamically linked, interpreter `/lib64/ld-linux-x86-64.so.2`, for GNU/Linux 2.0.0 | `libOpenCL.so.1`, `libm.so.6`, `libc.so.6`, `libpthread.so.0`, `libdl.so.2` | 21 |
+| `HashPulse-linux-x86_64` | 4 871 096 o, sha256 `a10f387870e1…` | ELF 64-bit LSB executable, **statically linked**, stripped | `not a dynamic executable` | 2 |
+| `HashPulse-linux-x86_64-gpu` | 5 492 400 o, sha256 `628a5bba2738…` | ELF 64-bit LSB **pie** executable, dynamically linked, interpreter `/lib64/ld-linux-x86-64.so.2`, for GNU/Linux 2.0.0 | `libOpenCL.so.1`, `libm.so.6`, `libc.so.6`, `libpthread.so.0`, `libdl.so.2` | 21 |
 
 `grep -ac OpenCL` compte des lignes, pas des occurrences : les 2 du binaire CPU sont les littéraux
 de la bannière hybride Blocknet (« OpenCL lanes »), pas du code GPU — `ldd` n'y liste aucune
