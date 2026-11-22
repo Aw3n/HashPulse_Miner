@@ -1,6 +1,6 @@
 # HashPulse
 
-**Mineur Xelis, DragonX, Parano1d, Blocknet et Firo — CPU & GPU (OpenCL)**
+**Mineur Xelis, DragonX, Parano1d, Blocknet, Firo et Kerrigan — CPU & GPU (OpenCL)**
 
 ![version](https://img.shields.io/badge/version-2.0.0-00c89b)
 ![support](https://img.shields.io/badge/CPU%20%2B%20GPU-00d4ff)
@@ -15,6 +15,7 @@ HashPulse est un mineur performant supportant à la fois le **CPU** et le **GPU 
 | Parano1d (`--coin parano1d`, `noid`) | Poseidon2b | `o1...` (60 caractères) | disponible (CPU) |
 | Blocknet (`--coin blocknet`, `bnt`) | Argon2id (2 GiB) | base58, 64 ou 68 octets décodés | disponible (CPU & GPU) |
 | Firo (`--coin firo`, `xpm`) | FiroPoW (ProgPoW 0.9.4, programmes d'un bloc) | base58check `a…` (mainnet) ou `t…` (testnet), 34 caractères | disponible (CPU) |
+| Kerrigan (`--coin kerrigan`, `krgn`) | Equihash 192,7 (BLAKE2b personnalisé « kerrigan ») | base58check `K…`, 34 caractères | disponible (CPU & GPU hybride) |
 
 Sans `--coin`, le coin est déduit du format de l'adresse. Quand le moteur de hash d'un coin n'est pas
 intégré, HashPulse refuse de démarrer au lieu de soumettre des parts invalides à un pool.
@@ -117,6 +118,16 @@ petites rigs, `:3434` au-delà de 10 kH/s. RandomX rend ~10 H/s par thread, et l
 HashPulse.exe --coin blocknet --pool stratum+tcp://bntpool.com:3333 --address VOTRE_ADRESSE_BLOCKNET --worker rig_01
 ```
 
+### Pool Mining — Kerrigan (Equihash 192,7)
+
+```powershell
+HashPulse.exe --coin kerrigan --pool stratum+tcp://mine.kerriganpool.com:7203 --address VOTRE_ADRESSE_KERRIGAN --worker rig_01
+```
+
+Le solveur Equihash 192,7 tourne en CPU par défaut ; `--gpu` active le chemin hybride
+(arbre de Wagner sur le GPU, recréation des indices sur un petit pool CPU). Sur le multipool
+zpool, ajoutez `--password c=KRGN` pour sélectionner le paiement en KRGN (voir [section 4](#kerrigan-equihash-1927)).
+
 ### Pool Mining — Vipor (France)
 
 ```powershell
@@ -161,7 +172,7 @@ HashPulse.exe --pool stratum+tcp://fr.grandpool.io:2025 --address xel:VOTRE_ADRE
 HashPulse.exe --pool stratum+tcp://fr.vipor.net:5077 --address xel:VOTRE_ADRESSE --gpu
 ```
 
-`--gpu` ajoute le GPU OpenCL ; le CPU continue de tourner sur tous les cœurs (hybride). Pour le GPU seul, ajoutez `--no-cpu`.
+`--gpu` ajoute le GPU OpenCL. Sur Xelis et Blocknet, le CPU continue de tourner sur tous les cœurs (hybride) ; `--no-cpu` y mine au GPU seul. Kerrigan emploie un pool CPU réduit pour recréer les indices (voir [section 4](#kerrigan-equihash-1927)).
 
 ### GPU seul (CPU inactif)
 
@@ -204,9 +215,9 @@ Définit un nom de worker personnalisé pour identifier votre rig sur le pool.
 | Option | Description | Défaut |
 |--------|-------------|--------|
 | `--daemon <URL>` | URL du daemon/nœud pour le solo mining : WebSocket (`ws://`/`wss://`) pour Xelis, API HTTP du core pour Blocknet, RPC HTTP de `firod` pour Firo | **Requis (solo)** |
-| `--pool <URL>` | URL du pool pour le pool mining : Stratum pour Xelis/DragonX/Parano1d/Firo, lignes JSON pour Blocknet | **Requis (pool)** |
+| `--pool <URL>` | URL du pool pour le pool mining : Stratum pour Xelis/DragonX/Parano1d/Firo/Kerrigan, lignes JSON pour Blocknet | **Requis (pool)** |
 | `--address <ADDR>` | Adresse wallet du coin miné, pour recevoir les récompenses | **Obligatoire** |
-| `--coin <NOM>` | Coin à miner : `xelis`, `dragonx`, `parano1d`, `blocknet`, `firo` | déduit de l'adresse |
+| `--coin <NOM>` | Coin à miner : `xelis`, `dragonx`, `parano1d`, `blocknet`, `firo`, `kerrigan` | déduit de l'adresse |
 | `--worker <NAME>` | Nom du worker visible sur le pool | `worker1` |
 | `--threads <N>` | Nombre de threads CPU pour le minage | auto (nb cœurs ; Blocknet : cœurs physiques +1 SMT, borné par la RAM) |
 | `--gpu` | Ajoute le GPU OpenCL au CPU (hybride) ; le CPU continue par défaut | désactivé |
@@ -215,6 +226,7 @@ Définit un nom de worker personnalisé pour identifier votre rig sur le pool.
 | `--gpu-intensity <N>` | Work-items par GPU (~531 KB VRAM chacun). Plus = plus de hashrate | auto : plafond d'allocation unique − 1 work-group (2880 sur GTX 1060 6 Go) |
 | `--dev-fee <PERCENT>` | Pourcentage de la dev tax (minage pour le développeur) | `1.0` |
 | `--user-agent <NAME>` | User-agent du mineur (certains pools exigent un nom whitelisté, ex : `rigel/1.4.5` pour GrandPool) | `HashPulse/2.0.0` |
+| `--password <PASS>` | Mot de passe Stratum ; un multipool comme zpool y sélectionne le coin de paiement (`c=KRGN` pour Kerrigan) | `x` |
 | `--no-ssl-verify` | Accepte n'importe quel certificat TLS (pools Parano1d auto-signés, ex : LPRoute) | vérification activée |
 | `--api-token <HEX>` | Jeton de l'API HTTP du core Blocknet | lu dans `api.cookie` |
 | `--api-cookie <CHEMIN>` | Fichier `api.cookie` du core, si le nœud n'est pas à l'emplacement par défaut | répertoire du nœud |
@@ -300,6 +312,43 @@ HashPulse.exe --coin blocknet --pool stratum+tcp://bntpool.com:3333 --address VO
 HashPulse.exe --coin blocknet --daemon http://127.0.0.1:8332 --address VOTRE_ADRESSE_BLOCKNET
 ```
 
+### Kerrigan (Equihash 192,7)
+
+Kerrigan se mine en pool (Stratum). Le solveur Equihash 192,7 est intégré et validé
+contre le consensus de la chaîne ; une part soumise porte la solution de 400 octets
+(préambule `fd9001` + 128 indices de 25 bits). Le minage solo n'est pas implémenté.
+
+`--gpu` active un solveur hybride : l'arbre de Wagner (phase 1, memory-hard) tourne sur le
+GPU OpenCL (~4,9 GiB de VRAM) et un petit pool CPU recrée les indices (phase 2, ~1/4 des
+cœurs). Le solveur GPU est bit-exact avec le consensus (même ensemble de solutions partielles,
+chaque solution recréée vérifie). Mesuré sur GTX 1060 + Ryzen 5700X, le gain est d'environ
+3× le CPU-seul — le plafond est la bande passante mémoire de la phase 2, pas le GPU. La
+recréation trie les lignes par clé de collision (tri comptage bit-exact), ce qui accélère
+la fusion mémoire sans changer l'ensemble des solutions.
+Si le GPU est absent ou la VRAM insuffisante, HashPulse retombe sur le CPU-seul et continue
+de miner.
+
+```powershell
+HashPulse.exe --coin kerrigan --pool stratum+tcp://mine.kerriganpool.com:7203 --address VOTRE_ADRESSE_KERRIGAN --worker rig_01 --gpu
+```
+
+| Pool | Usage | URL Stratum |
+|------|-------|-------------|
+| KerriganPool | PPLNS | `stratum+tcp://mine.kerriganpool.com:7203` |
+| KerriganPool | SOLO | `stratum+tcp://mine.kerriganpool.com:7213` |
+| zpool | multipool, TCP | `stratum+tcp://equihash192.mine.zpool.ca:2192` |
+| zpool | multipool, TLS | `stratum+ssl://equihash192.mine.zpool.ca:52192` |
+
+```powershell
+HashPulse.exe --coin kerrigan --pool stratum+tcp://mine.kerriganpool.com:7203 --address VOTRE_ADRESSE_KERRIGAN --worker rig_01
+```
+
+`--coin` est facultatif : une adresse `K…` (34 caractères) désigne Kerrigan à elle seule.
+Sur zpool (multipool), `--password c=KRGN` sélectionne le paiement en KRGN. Le client
+n'accepte qu'un `mining.notify` épinglé sur la personalisation « kerrigan » : si un pool
+renvoie une autre variante d'Equihash, HashPulse refuse de miner plutôt que de soumettre
+des solutions que la chaîne rejetterait.
+
 ---
 
 ## 5. Dev Tax (taxe de développement)
@@ -384,8 +433,8 @@ Au démarrage, HashPulse détecte et liste tous les GPU OpenCL disponibles avec 
 
 | Binaire | Identité | `file` | `ldd` | `grep -ac OpenCL` |
 |---|---|---|---|---|
-| `HashPulse-linux-x86_64` | 4 715 448 o, sha256 `549a275808a2…` | ELF 64-bit LSB executable, **statically linked**, stripped | `not a dynamic executable` | 2 |
-| `HashPulse-linux-x86_64-gpu` | 5 246 176 o, sha256 `a55f26f3a491…` | ELF 64-bit LSB **pie** executable, dynamically linked, interpreter `/lib64/ld-linux-x86-64.so.2`, for GNU/Linux 2.0.0 | `libOpenCL.so.1`, `libm.so.6`, `libc.so.6`, `libpthread.so.0`, `libdl.so.2` | 20 |
+| `HashPulse-linux-x86_64` | 4 871 128 o, sha256 `dbce82a28273…` | ELF 64-bit LSB executable, **statically linked**, stripped | `not a dynamic executable` | 2 |
+| `HashPulse-linux-x86_64-gpu` | 5 487 632 o, sha256 `82efeb5dfc84…` | ELF 64-bit LSB **pie** executable, dynamically linked, interpreter `/lib64/ld-linux-x86-64.so.2`, for GNU/Linux 2.0.0 | `libOpenCL.so.1`, `libm.so.6`, `libc.so.6`, `libpthread.so.0`, `libdl.so.2` | 21 |
 
 `grep -ac OpenCL` compte des lignes, pas des occurrences : les 2 du binaire CPU sont les littéraux
 de la bannière hybride Blocknet (« OpenCL lanes »), pas du code GPU — `ldd` n'y liste aucune
@@ -433,7 +482,7 @@ proprement les threads et rend la main. C'est ce que font les harnais de preuve 
 
 <div align="center">
 
-**HashPulse v2.0.0** — Mineur Xelis, DragonX, Parano1d, Blocknet et Firo avec support CPU & GPU OpenCL
+**HashPulse v2.0.0** — Mineur Xelis, DragonX, Parano1d, Blocknet, Firo et Kerrigan avec support CPU & GPU OpenCL
 
 XelisHash V3 · Dev Tax configurable · Solo & Pool Mining
 
