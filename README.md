@@ -125,8 +125,8 @@ HashPulse.exe --coin kerrigan --pool stratum+tcp://mine.kerriganpool.com:7203 --
 ```
 
 Le solveur Equihash 192,7 tourne en CPU par défaut ; `--gpu` active le chemin hybride
-(arbre de Wagner sur le GPU, recréation des indices sur un petit pool CPU). Sur le multipool
-zpool, ajoutez `--password c=KRGN` pour sélectionner le paiement en KRGN (voir [section 4](#kerrigan-equihash-1927)).
+(arbre de Wagner sur le GPU, recréation des indices sur un petit pool CPU). Le mot de passe
+est libre sur les pools listés en [section 4](#kerrigan-equihash-1927).
 
 ### Pool Mining — Vipor (France)
 
@@ -226,7 +226,7 @@ Définit un nom de worker personnalisé pour identifier votre rig sur le pool.
 | `--gpu-intensity <N>` | Work-items par GPU (~531 KB VRAM chacun). Plus = plus de hashrate | auto : plafond d'allocation unique − 1 work-group (2880 sur GTX 1060 6 Go) |
 | `--dev-fee <PERCENT>` | Pourcentage de la dev tax (minage pour le développeur) | `1.0` |
 | `--user-agent <NAME>` | User-agent du mineur (certains pools exigent un nom whitelisté, ex : `rigel/1.4.5` pour GrandPool) | `HashPulse/2.0.0` |
-| `--password <PASS>` | Mot de passe Stratum ; un multipool comme zpool y sélectionne le coin de paiement (`c=KRGN` pour Kerrigan) | `x` |
+| `--password <PASS>` | Mot de passe Stratum, transmis tel quel (utilisé par les multipools) ; les pools Kerrigan listés acceptent n'importe lequel | `x` |
 | `--no-ssl-verify` | Accepte n'importe quel certificat TLS (pools Parano1d auto-signés, ex : LPRoute) | vérification activée |
 | `--api-token <HEX>` | Jeton de l'API HTTP du core Blocknet | lu dans `api.cookie` |
 | `--api-cookie <CHEMIN>` | Fichier `api.cookie` du core, si le nœud n'est pas à l'emplacement par défaut | répertoire du nœud |
@@ -336,22 +336,40 @@ HashPulse.exe --coin kerrigan --pool stratum+tcp://mine.kerriganpool.com:7203 --
 |------|-------|-------------|
 | KerriganPool | PPLNS | `stratum+tcp://mine.kerriganpool.com:7203` |
 | KerriganPool | SOLO | `stratum+tcp://mine.kerriganpool.com:7213` |
-| zpool | multipool, TCP | `stratum+tcp://equihash192.mine.zpool.ca:2192` |
-| zpool | multipool, TLS | `stratum+ssl://equihash192.mine.zpool.ca:52192` |
 | VeinPool (FR) | PPLNS | `stratum+tcp://veinpool.fr:3280` |
 | VeinPool (FR) | SOLO | `stratum+tcp://veinpool.fr:3282` |
 | VeinPool (FR) | PPLNS, TLS | `stratum+ssl://veinpool.fr:13280` |
+| Pooly | PPLNS, TCP | `stratum+tcp://pooly.ca:3202` |
+| Rplant (Europe) | TLS | `stratum+ssl://eu.rplant.xyz:17040` |
+| Rplant (Europe) | TCP | `stratum+tcp://eu.rplant.xyz:7040` |
+| Nitopool | PPLNSBF, TCP | `stratum+tcp://pool.nitopool.online:3057` |
 
 ```powershell
 HashPulse.exe --coin kerrigan --pool stratum+tcp://mine.kerriganpool.com:7203 --address VOTRE_ADRESSE_KERRIGAN --worker rig_01
 ```
 
 `--coin` est facultatif : une adresse `K…` (34 caractères) désigne Kerrigan à elle seule.
-Sur zpool (multipool), `--password c=KRGN` sélectionne le paiement en KRGN. Le client
-accepte le `mining.notify` standard à 8 champs (veinpool.fr) comme la forme Miningcore à
-10 champs qui ajoute les tags algo/personalisation (kerriganpool.com) : l'algorithme est
-épinglé sur Equihash 192,7 / « kerrigan » par `--coin`, et un tag présent qui nommerait une
-autre variante d'Equihash est refusé plutôt que miné en solutions que la chaîne rejetterait.
+Le mot de passe est libre (`x`) sur chacun de ces pools. Le client accepte le
+`mining.notify` standard à 8 champs (veinpool.fr) comme la forme Miningcore à 10 champs
+qui ajoute les tags algo/personalisation (kerriganpool.com, pooly.ca, rplant, nitopool) :
+l'algorithme est épinglé sur Equihash 192,7 / « kerrigan » par `--coin`, et un tag présent
+qui nommerait une autre variante d'Equihash est refusé plutôt que miné en solutions que la
+chaîne rejetterait.
+
+**zpool est retiré de la liste.** Son endpoint `equihash192…zpool.ca` répond bien en
+`useCoinbasetxn`, mais son `mining.notify` porte la version `04000000`, un `hashReserved`
+non nul et le tag de personnalisation `ZcashPoW` : c'est une autre pièce que
+kerrigan.network (`00060020`, reserved nul, `kerrigan`). HashPulse refuse donc ce notify au
+lieu de produire des parts que Kerrigan rejetterait.
+
+Chaque pool impose sa propre difficulté de départ, et c'est le facteur de temps réel :
+mesuré le 2026-11-22 sur une GTX 1060 en mode hybride (31 solutions en 560 s, soit
+~0,05 solution/s), VeinPool descend à 0,25 et
+Nitopool à 0,1 en quelques minutes (parts acceptées) ; Pooly démarre à 16 puis 6 ; Rplant
+maintient 332 pour un worker neuf, ce qui le réserve à un hashrate bien plus élevé. Le client ne
+peut pas imposer sa difficulté : `mining.suggest_difficulty` est refusé par Pooly et Nitopool
+(« Unsupported request ») et silencieusement ignoré par Rplant, qui répond 332 dans les deux sens
+de l'échange (sondes jouées le 2026-11-22).
 
 ---
 
@@ -437,8 +455,8 @@ Au démarrage, HashPulse détecte et liste tous les GPU OpenCL disponibles avec 
 
 | Binaire | Identité | `file` | `ldd` | `grep -ac OpenCL` |
 |---|---|---|---|---|
-| `HashPulse-linux-x86_64` | 4 871 096 o, sha256 `a10f387870e1…` | ELF 64-bit LSB executable, **statically linked**, stripped | `not a dynamic executable` | 2 |
-| `HashPulse-linux-x86_64-gpu` | 5 492 400 o, sha256 `628a5bba2738…` | ELF 64-bit LSB **pie** executable, dynamically linked, interpreter `/lib64/ld-linux-x86-64.so.2`, for GNU/Linux 2.0.0 | `libOpenCL.so.1`, `libm.so.6`, `libc.so.6`, `libpthread.so.0`, `libdl.so.2` | 21 |
+| `HashPulse-linux-x86_64` | 4 871 736 o, sha256 `c299c047eaa1…` | ELF 64-bit LSB executable, **statically linked**, stripped | `not a dynamic executable` | 2 |
+| `HashPulse-linux-x86_64-gpu` | 5 493 232 o, sha256 `1736ce534517…` | ELF 64-bit LSB **pie** executable, dynamically linked, interpreter `/lib64/ld-linux-x86-64.so.2`, for GNU/Linux 2.0.0 | `libOpenCL.so.1`, `libm.so.6`, `libc.so.6`, `libpthread.so.0`, `libdl.so.2` | 21 |
 
 `grep -ac OpenCL` compte des lignes, pas des occurrences : les 2 du binaire CPU sont les littéraux
 de la bannière hybride Blocknet (« OpenCL lanes »), pas du code GPU — `ldd` n'y liste aucune
