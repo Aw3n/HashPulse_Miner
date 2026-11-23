@@ -319,7 +319,7 @@ contre le consensus de la chaîne ; une part soumise porte la solution de 400 oc
 (préambule `fd9001` + 128 indices de 25 bits). Le minage solo n'est pas implémenté.
 
 `--gpu` active un solveur hybride : l'arbre de Wagner (phase 1, memory-hard) tourne sur le
-GPU OpenCL (~4,9 GiB de VRAM) et un petit pool CPU recrée les indices (phase 2, ~1/8 des
+GPU OpenCL (~4,7 GiB de VRAM) et un petit pool CPU recrée les indices (phase 2, ~1/8 des
 cœurs). Le solveur GPU est bit-exact avec le consensus (même ensemble de solutions partielles,
 chaque solution recréée vérifie). Mesuré sur GTX 1060 + Ryzen 5700X, le gain est d'environ
 3× le CPU-seul — le plafond est la bande passante mémoire de la phase 2, pas le GPU. La
@@ -339,7 +339,7 @@ L'attente des kernels GPU se fait par sonde d'événement + pause de 1 ms plutô
 `clFinish` (qui occupait un cœur à tourner à vide), et l'histogramme de tri est remis à zéro
 côté device plutôt que téléversé depuis l'hôte.
 
-**Stabilité du bureau (anti-gel).** L'arbre de Wagner est borné par le consensus à ~4,8 GiB
+**Stabilité du bureau (anti-gel).** L'arbre de Wagner est borné par le consensus à ~4,7 GiB
 de VRAM et ne peut pas rétrécir ; sur une carte 6 GiB il ne restait que ~400 MiB au
 compositeur Windows, et le GPU tournait à ~100 % en continu — la session gelait. Trois
 garde-fous : (1) une pause bureau de 5 ms après chaque kernel GPU rend régulièrement la main
