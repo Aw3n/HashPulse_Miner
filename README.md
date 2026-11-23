@@ -346,9 +346,13 @@ garde-fous : (1) une pause bureau de 5 ms après chaque kernel GPU rend réguli�
 à DWM (util GPU moyenne mesurée 86 % → 79 % sur GTX 1060, fenêtre de 70 s) ; (2) l'hybride
 ne démarre que si la carte laisse **≥1 GiB de VRAM au desktop** une fois l'arbre résident —
 sinon HashPulse retombe sur le CPU-seul au lieu de sur-allouer la VRAM et de faire paginer
-Windows ; (3) sur le chemin CPU-seul, 4 GiB de RAM sont réservés à l'OS (au lieu de 2) et les
-solveurs auto sont bornés aux **cœurs physiques** (les siblings SMT thrashent la mémoire sans
-gagner de solutions). Le gate consensus GPU bit-exact est rejoué à chaque changement : la
+Windows ; (3) sur le chemin CPU-seul, 4 GiB de RAM sont réservés à l'OS (au lieu de 2), les
+solveurs auto sont bornés à la **moitié des cœurs physiques** (la DDR4 sature avant les cœurs :
+mesuré 1→2→4 threads = 1,0→1,83→2,77× le débit, la seconde moitié achète peu de hashrate tout
+en doublant la RAM) et tournent en **priorité background** (Windows `THREAD_MODE_BACKGROUND_BEGIN`,
+Unix nice +10) : le bureau gagne sous contention sans perte de hashrate au repos (+2 % mesuré).
+Le repli CPU passe ainsi de ~23,5 à ~9,4 GiB et de 10 à 4 solveurs (la moitié des 8 cœurs
+physiques), sans geler la session. Le gate consensus GPU bit-exact est rejoué à chaque changement : la
 pause et les réserves ne modifient aucune solution.
 
 ```powershell
