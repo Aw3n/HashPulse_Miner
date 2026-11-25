@@ -318,23 +318,28 @@ Kerrigan se mine en pool (Stratum). Le solveur Equihash 192,7 est intégré et v
 contre le consensus de la chaîne ; une part soumise porte la solution de 400 octets
 (préambule `fd9001` + 128 indices de 25 bits). Le minage solo n'est pas implémenté.
 
+Le solveur CPU a été accéléré : 14,9 s par en-tête sur un cœur (contre 41,9 s avec la
+version précédente) et 0,308 Sol/s à 4 solveurs contre 0,037 au même harnais A/B — largeurs
+compactes de la phase 2, tri radix 12 bits, préchargement de l'arbre, BLAKE2b 4-way AVX2
+(repli scalaire bit-exact sur un CPU sans AVX2). L'ensemble des solutions reste identique
+(gates KAT 9/9).
+
 `--gpu` active un solveur hybride : l'arbre de Wagner (phase 1, memory-hard) tourne sur le
 GPU OpenCL (~4,7 GiB de VRAM) et un petit pool CPU recrée les indices (phase 2, ~1/8 des
 cœurs). Le solveur GPU est bit-exact avec le consensus (même ensemble de solutions partielles,
-chaque solution recréée vérifie). Mesuré sur GTX 1060 + Ryzen 5700X, le gain est d'environ
-3× le CPU-seul — le plafond est la bande passante mémoire de la phase 2, pas le GPU. La
-recréation trie les lignes par clé de collision (tri comptage bit-exact), ce qui accélère
-la fusion mémoire sans changer l'ensemble des solutions.
+chaque solution recréée vérifie). La recréation emploie la même cascade compacte que le
+solveur CPU accéléré : 1,6 s par partielle mesurés contre 16,0 s avant (même ensemble de
+solutions, solution réseau reproduite), si bien que l'hybride est désormais borné par l'arbre
+GPU (~0,25–0,43 partielle/s mesurés sur GTX 1060). Le « ~3× » publié auparavant se mesurait
+contre l'ancien solveur CPU ; sur une carte 6 GiB, le gate VRAM ci-dessous écarte de toute
+façon l'hybride et le CPU-seul accéléré mine seul.
 Si le GPU est absent ou la VRAM insuffisante, HashPulse retombe sur le CPU-seul et continue
 de miner.
 
-Sans `--threads`, le pool de recréation est calibré à 1/8 des cœurs logiques : la phase 2 est
-bornée par la bande passante mémoire, pas par les cœurs. Sur une machine 16 logiques, le mode
-hybride tient 1,16 à 1,28 cœur en moyenne selon la fenêtre (pic 1,6) pour ~0,03 à 0,10
-solution/s, mesuré en live le 2026-11-22 sur Nitopool en fenêtres appariées de 181 s puis
-reconfirmé sur 186 s avec les octets livrés. Les cœurs au-delà n'achètent pas de débit : le même
-binaire réglé à 4 threads monte à ~1,7 cœur et à 16 threads à ~2,3 cœur, avec un débit et un
-nombre de parts acceptées inchangés. `--threads N` fixe explicitement N threads de recréation.
+Sans `--threads`, le pool de recréation est calibré à 1/8 des cœurs logiques. Avec la
+recréation compacte (1,6 s par partielle), c'est la phase 1 GPU (0,25–0,43 partielle/s
+mesurés sur GTX 1060) qui borne l'hybride, plus la bande passante de la phase 2 ; un pool
+de deux threads garde la marge. `--threads N` fixe explicitement N threads de recréation.
 L'attente des kernels GPU se fait par sonde d'événement + pause de 1 ms plutôt que par
 `clFinish` (qui occupait un cœur à tourner à vide), et l'histogramme de tri est remis à zéro
 côté device plutôt que téléversé depuis l'hôte.
@@ -348,7 +353,8 @@ ne démarre que si la carte laisse **≥1 GiB de VRAM au desktop** une fois l'ar
 sinon HashPulse retombe sur le CPU-seul au lieu de sur-allouer la VRAM et de faire paginer
 Windows ; (3) sur le chemin CPU-seul, 4 GiB de RAM sont réservés à l'OS (au lieu de 2), les
 solveurs auto sont bornés à la **moitié des cœurs physiques** (la DDR4 sature avant les cœurs :
-mesuré 1→2→4 threads = 1,0→1,83→2,77× le débit, la seconde moitié achète peu de hashrate tout
+mesuré 1→2→4 threads = 1,0→1,90→2,55× le débit, soit 0,121→0,229→0,308 Sol/s sur l'en-tête
+KAT, la seconde moitié achète peu de hashrate tout
 en doublant la RAM) et tournent en **priorité background** (Windows `THREAD_MODE_BACKGROUND_BEGIN`,
 Unix nice +10) : le bureau gagne sous contention sans perte de hashrate au repos (+2 % mesuré).
 Le repli CPU passe ainsi de ~23,5 à ~9,4 GiB et de 10 à 4 solveurs (la moitié des 8 cœurs
